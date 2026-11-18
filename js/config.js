@@ -10,6 +10,7 @@
 
     STAGE1_TARGET: 1200,
     STAGE2_TARGET: 12000,
+    HEAL_COST: 1200,
 
     WORLD: {
       WIDTH: 3600,
@@ -238,6 +239,10 @@
       ],
       shieldBlock: [
         { user: '国家反诈APP', msg: '🛡️【预警拦截】已自动为 FriedRich 阻断一次诈骗攻击！' }
+      ],
+      healBought: [
+        { user: '毒舌群友', msg: '笑死，花 ¥1200 买强心套餐回血，四舍五入相当于又体验了一把痛失 1200 😂' },
+        { user: '暖心群友', msg: '留得青山在不怕没柴烧！心态稳住了才能把大钱赚回来！' }
       ],
       bossSpawn: [
         { user: '全群拉响警报', msg: '🚨 电诈团伙大头目现身了！拾取场上的 ⚡96110电磁炮 或按 E 狠狠制裁他追回巨款！' }

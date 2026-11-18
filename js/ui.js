@@ -30,6 +30,9 @@
       this.grabCdText = document.getElementById('grab-cd-text');
       this.skillCdOverlay = document.getElementById('skill-cd-overlay');
       this.skillCdText = document.getElementById('skill-cd-text');
+      this.btnHeal = document.getElementById('btn-heal');
+      this.healPriceTag = document.getElementById('heal-price-tag');
+      this.healSlotLabel = document.getElementById('heal-slot-label');
 
       this.minimapPanel = document.getElementById('minimap-panel');
       this.minimapCanvas = document.getElementById('minimap-canvas');
@@ -322,6 +325,19 @@
       this.updateSlotCd(this.dashCdOverlay, this.dashCdText, player.dashCd, player.dashMaxCd);
       this.updateSlotCd(this.grabCdOverlay, this.grabCdText, player.grabCd, player.grabMaxCd);
       this.updateSlotCd(this.skillCdOverlay, this.skillCdText, player.skillCd, player.skillMaxCd);
+
+      if (this.btnHeal) {
+        const isFullHp = player.hp >= player.maxHp;
+        const canBuy = roundedMoney >= CONFIG.HEAL_COST && !isFullHp;
+        this.btnHeal.classList.toggle('can-buy', canBuy);
+        this.btnHeal.classList.toggle('cant-buy', !canBuy);
+        if (this.healPriceTag) {
+          this.healPriceTag.textContent = `¥${CONFIG.HEAL_COST}`;
+        }
+        if (this.healSlotLabel) {
+          this.healSlotLabel.textContent = isFullHp ? '已满血' : canBuy ? '回血+1' : '买回血';
+        }
+      }
 
       const compact = this.isCompactViewport();
       let questText = '';

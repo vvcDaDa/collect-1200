@@ -400,6 +400,38 @@ body.is-touch-device .touch-only {
 .slot-dash { border-color: rgba(56, 189, 248, 0.65); }
 .slot-grab { border-color: rgba(250, 204, 21, 0.7); }
 .slot-report { border-color: rgba(248, 113, 113, 0.75); }
+.slot-heal {
+  border-color: rgba(52, 211, 153, 0.75);
+}
+
+.slot-heal.can-buy {
+  border-color: #34D399;
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.38);
+}
+
+.slot-heal.cant-buy {
+  opacity: 0.55;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.heal-price-tag {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 9.5px;
+  font-weight: 900;
+  color: #6EE7B7;
+  background: rgba(6, 78, 59, 0.85);
+  padding: 0 4px;
+  border-radius: 4px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.slot-heal.cant-buy .heal-price-tag {
+  color: #94A3B8;
+  background: rgba(15, 23, 42, 0.8);
+}
 
 .slot-cd-fill {
   position: absolute;
@@ -1251,26 +1283,40 @@ kbd {
     box-shadow: none;
     backdrop-filter: none;
     padding: 0;
-    gap: 9px;
+    gap: 7px;
     z-index: 15;
   }
 
   .hotbar-slot {
-    width: 54px;
-    height: 54px;
+    width: 49px;
+    height: 49px;
     border-radius: 50%;
     background: rgba(15, 23, 42, 0.44);
     border-width: 1.8px;
     backdrop-filter: blur(3px);
+    overflow: visible;
+  }
+
+  .slot-cd-fill {
+    border-radius: 50%;
   }
 
   .slot-report {
-    width: 60px;
-    height: 60px;
+    width: 55px;
+    height: 55px;
+  }
+
+  .heal-price-tag {
+    top: -5px;
+    right: 50%;
+    transform: translateX(50%);
+    font-size: 8.5px;
+    padding: 0 4px;
+    white-space: nowrap;
   }
 
   .slot-icon {
-    font-size: 18px;
+    font-size: 17px;
   }
 
   .slot-label {

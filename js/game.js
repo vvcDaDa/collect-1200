@@ -85,6 +85,7 @@
       this.celebrateTimer = 0;
       this.bottleCombo = 0;
       this.bottleComboTimer = 0;
+      this.lastHealTime = -10;
 
       // Visual FX
       this.floatingTexts = [];
@@ -285,6 +286,8 @@
             this.triggerGrabSkill();
           } else if (e.code === 'KeyE' || e.code === 'KeyJ') {
             this.triggerReportSkill();
+          } else if ((e.code === 'KeyF' || e.code === 'KeyH') && !e.repeat) {
+            this.triggerBuyHeal();
           }
         }
       });
@@ -384,6 +387,11 @@
         e.stopPropagation();
         if (this.state === 'playing') this.triggerReportSkill();
       });
+      document.getElementById('btn-heal').addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.state === 'playing') this.triggerBuyHeal();
+      });
     }
 
     syncMouseWorld() {
@@ -476,6 +484,7 @@
       this.empSpawnTimer = 3.2;
       this.bottleCombo = 0;
       this.bottleComboTimer = 0;
+      this.lastHealTime = -10;
 
       for (let i = 0; i < 50; i++) {
         this.spawnStreetCollectible(i < 16);
@@ -746,6 +755,57 @@
         this.addShake(0.16, 5);
         this.ui.pushChat('reportHit');
       }
+    }
+
+    triggerBuyHeal() {
+      if (!this.player || this.state !== 'playing') return;
+      if (this.lastHealTime && this.time - this.lastHealTime < 0.45) return;
+
+      const cost = CONFIG.HEAL_COST;
+      if (this.player.hp >= this.player.maxHp) {
+        this.addFloatingText(this.player.x, this.player.y - 38, '❤️ 心态已满，无需购买！', '#93C5FD', 14);
+        return;
+      }
+
+      if (this.money < cost) {
+        this.addFloatingText(
+          this.player.x,
+          this.player.y - 38,
+          `💸 差 ¥${Math.ceil(cost - this.money)} 才够 ¥${cost} 买回血！`,
+          '#FDA4AF',
+          14
+        );
+        return;
+      }
+
+      this.lastHealTime = this.time;
+      this.money -= cost;
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + 1);
+      this.player.slowTime = 0;
+      this.player.invulnTime = Math.max(this.player.invulnTime, 0.9);
+      this.player.setMood('cool', 1.1);
+
+      audio.upgradePick();
+      this.ui.flashScreen('rgba(16, 185, 129, 0.28)');
+      this.shockwaves.push({
+        x: this.player.x,
+        y: this.player.y,
+        r: 14,
+        maxR: 115,
+        color: '#34D399',
+        life: 0.32,
+        maxLife: 0.32
+      });
+      this.spawnBurst(this.player.x, this.player.y, '#4ADE80', 18);
+      this.addFloatingText(
+        this.player.x,
+        this.player.y - 44,
+        `❤️‍🩹 消费 ¥${cost} 回血 +1❤️！`,
+        '#4ADE80',
+        17
+      );
+      this.ui.pushChat('healBought');
+      this.refreshHUDState();
     }
 
     gainMoney(baseAmount, sourceCategory, x, y, customLabel = null) {
