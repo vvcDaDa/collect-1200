@@ -388,9 +388,16 @@
     }
 
     render(ctx, cam, time) {
-      // 1. Outer Dark Frame (culled to camera viewport)
-      ctx.fillStyle = '#0B1120';
-      ctx.fillRect(cam.x - 20, cam.y - 20, cam.w + 40, cam.h + 40);
+      // 1. Outer Urban Ring Greenbelt (cleanly visible when camera overscrolls at map edges!)
+      ctx.fillStyle = '#0F1D1A';
+      ctx.fillRect(cam.x - 40, cam.y - 40, cam.w + 80, cam.h + 80);
+
+      // Outer concrete ring-wall shoulder around the city block
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(0, 0, this.width, this.height);
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(2, 2, this.width - 4, this.height - 4);
 
       // 2. Render 4 Distinct District Ground Pavements!
       const midX = 1800;
@@ -519,10 +526,19 @@
         graphics.drawKoiPond(ctx, this.koiPond, time);
       }
 
-      // 6. City Perimeter Caution Border
+      // 6. City Perimeter Hazard Guardrail Border
       ctx.save();
       ctx.strokeStyle = '#F59E0B';
-      ctx.lineWidth = 6;
+      ctx.lineWidth = 7;
+      ctx.strokeRect(
+        this.padding,
+        this.padding,
+        this.width - this.padding * 2,
+        this.height - this.padding * 2
+      );
+      ctx.strokeStyle = '#0F172A';
+      ctx.lineWidth = 7;
+      ctx.setLineDash([20, 20]);
       ctx.strokeRect(
         this.padding,
         this.padding,

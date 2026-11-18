@@ -144,7 +144,14 @@
       this.canvas.width = Math.floor(this.screenW * this.dpr);
       this.canvas.height = Math.floor(this.screenH * this.dpr);
 
-      this.zoom = this.screenW < 640 ? 0.75 : this.screenW < 960 ? 0.88 : 1.0;
+      const minDim = Math.min(this.screenW, this.screenH);
+      if (minDim < 520) {
+        this.zoom = Math.max(0.56, Math.min(0.68, minDim / 670));
+      } else if (minDim < 780) {
+        this.zoom = 0.82;
+      } else {
+        this.zoom = 1.0;
+      }
       this.viewW = this.screenW / this.zoom;
       this.viewH = this.screenH / this.zoom;
       this.cam.w = this.viewW;
@@ -294,11 +301,11 @@
         }
       });
 
-      // Touch Joystick
+      // Dynamic Floating Ghost Touch Joystick
       const joyZone = document.getElementById('joystick-zone');
       const joyBase = document.getElementById('joystick-base');
       const joyKnob = document.getElementById('joystick-knob');
-      const maxJoyDist = 38;
+      const maxJoyDist = 30;
 
       const updateKnob = (clientX, clientY) => {
         const dx = clientX - this.joyOrigin.x;
@@ -310,7 +317,7 @@
         const ky = Math.sin(angle) * clamped;
         joyKnob.style.transform = `translate(${kx.toFixed(1)}px, ${ky.toFixed(1)}px)`;
 
-        if (dist > 6) {
+        if (dist > 5) {
           this.joyVec.x = kx / maxJoyDist;
           this.joyVec.y = ky / maxJoyDist;
         } else {
@@ -325,6 +332,11 @@
         this.joyVec.x = 0;
         this.joyVec.y = 0;
         if (joyKnob) joyKnob.style.transform = 'translate(0px, 0px)';
+        if (joyBase) {
+          joyBase.classList.remove('active');
+          joyBase.style.left = '';
+          joyBase.style.top = '';
+        }
       };
 
       joyZone.addEventListener('pointerdown', (e) => {
@@ -333,9 +345,14 @@
         joyZone.setPointerCapture(e.pointerId);
         this.joyActive = true;
         this.joyPointerId = e.pointerId;
-        const rect = joyBase.getBoundingClientRect();
-        this.joyOrigin.x = rect.left + rect.width / 2;
-        this.joyOrigin.y = rect.top + rect.height / 2;
+        this.joyOrigin.x = e.clientX;
+        this.joyOrigin.y = e.clientY;
+        if (joyBase) {
+          const zRect = joyZone.getBoundingClientRect();
+          joyBase.classList.add('active');
+          joyBase.style.left = `${(e.clientX - zRect.left).toFixed(0)}px`;
+          joyBase.style.top = `${(e.clientY - zRect.top).toFixed(0)}px`;
+        }
         updateKnob(e.clientX, e.clientY);
       });
 
@@ -1203,6 +1220,8 @@
 
     updateCamera(lerpFactor) {
       if (!this.player) return;
+      const mobileLike = this.isTouchMode || Math.min(this.screenW, this.screenH) < 560;
+
       let lookAheadX = 0;
       let lookAheadY = 0;
       if (this.hasMouse && !this.isTouchMode) {
@@ -1210,14 +1229,23 @@
         lookAheadY = ((this.mouseScreen.y / this.screenH) - 0.5) * 75;
       }
 
-      const targetX = this.player.x + lookAheadX - this.viewW / 2;
-      const targetY = this.player.y + lookAheadY - this.viewH / 2;
+      // Frame Freddy slightly above center on mobile so thumbs/bottom controls never crowd view
+      const anchorRatioY = mobileLike ? 0.45 : 0.5;
+      const targetX = this.player.x + lookAheadX - this.viewW * 0.5;
+      const targetY = this.player.y + lookAheadY - this.viewH * anchorRatioY;
 
-      const maxCamX = Math.max(0, this.world.width - this.viewW);
-      const maxCamY = Math.max(0, this.world.height - this.viewH);
+      // Safe-area overscroll margins at map edges so Freddy never slides behind HUD or touch controls!
+      const marginSide = mobileLike ? 220 : 90;
+      const marginTop = mobileLike ? 260 : 120;
+      const marginBottom = mobileLike ? 380 : 155;
 
-      const clampedX = Math.max(0, Math.min(maxCamX, targetX));
-      const clampedY = Math.max(0, Math.min(maxCamY, targetY));
+      const minCamX = -marginSide;
+      const maxCamX = Math.max(minCamX, this.world.width - this.viewW + marginSide);
+      const minCamY = -marginTop;
+      const maxCamY = Math.max(minCamY, this.world.height - this.viewH + marginBottom);
+
+      const clampedX = Math.max(minCamX, Math.min(maxCamX, targetX));
+      const clampedY = Math.max(minCamY, Math.min(maxCamY, targetY));
 
       this.cam.x += (clampedX - this.cam.x) * lerpFactor;
       this.cam.y += (clampedY - this.cam.y) * lerpFactor;

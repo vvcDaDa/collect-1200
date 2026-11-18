@@ -44,6 +44,7 @@
       this.resultModal = document.getElementById('result-modal');
       this.toast = document.getElementById('toast');
 
+      this.btnRadar = document.getElementById('btn-radar');
       this.btnMute = document.getElementById('btn-mute');
       this.btnStartMute = document.getElementById('btn-start-mute');
       this.bestRecordText = document.getElementById('best-record-text');
@@ -65,6 +66,15 @@
       if (this.minimapPanel) {
         this.minimapPanel.addEventListener('click', () => this.toggleMinimapSize());
       }
+      if (this.btnRadar && this.minimapPanel) {
+        this.btnRadar.addEventListener('click', () => {
+          this.minimapPanel.classList.toggle('mobile-radar-open');
+        });
+      }
+    }
+
+    isCompactViewport() {
+      return window.innerWidth <= 820 || Math.min(window.innerWidth, window.innerHeight) < 520;
     }
 
     toggleMinimapSize() {
@@ -185,8 +195,10 @@
     }
 
     pushChat(category, force = false) {
+      const compact = this.isCompactViewport();
+      const minGap = compact ? 4200 : 2300;
       const now = performance.now();
-      if (!force && now - this.lastChatTime < 2300) return;
+      if (!force && now - this.lastChatTime < minGap) return;
 
       let entry = null;
       if (typeof category === 'string') {
@@ -202,7 +214,8 @@
         audio.qqNotify();
       }
 
-      while (this.chatFeed.children.length >= 3) {
+      const maxVisible = compact ? 1 : 3;
+      while (this.chatFeed.children.length >= maxVisible) {
         this.chatFeed.removeChild(this.chatFeed.firstChild);
       }
 
@@ -214,12 +227,13 @@
       `;
       this.chatFeed.appendChild(toast);
 
+      const durationMs = compact ? 2600 : 4800;
       setTimeout(() => {
         toast.style.opacity = '0';
         setTimeout(() => {
           if (toast.parentNode) toast.parentNode.removeChild(toast);
-        }, 320);
-      }, 4800);
+        }, 280);
+      }, durationMs);
     }
 
     flashScreen(color = 'rgba(239, 68, 68, 0.36)') {
@@ -309,18 +323,27 @@
       this.updateSlotCd(this.grabCdOverlay, this.grabCdText, player.grabCd, player.grabMaxCd);
       this.updateSlotCd(this.skillCdOverlay, this.skillCdText, player.skillCd, player.skillMaxCd);
 
+      const compact = this.isCompactViewport();
       let questText = '';
       let questClass = 'quest-banner';
       if (boss && !boss.dead) {
         questClass = 'quest-banner boss';
-        questText = `🚨 头目战【${boss.name}】(HP ${Math.ceil(boss.hp)}/${boss.maxHp})！拾取 ⚡96110电磁炮 或按右键/E制裁他，击败可追回 ¥${boss.dropTotal}！`;
+        questText = compact
+          ? `🚨 ${boss.name} HP:${Math.ceil(boss.hp)} | 捡⚡炮或举报重创!`
+          : `🚨 头目战【${boss.name}】(HP ${Math.ceil(boss.hp)}/${boss.maxHp})！拾取 ⚡96110电磁炮 或按右键/E制裁他，击败可追回 ¥${boss.dropTotal}！`;
       } else if (player.delivery) {
         questClass = 'quest-banner urgent';
-        questText = `🍱 配送中：【${player.delivery.food}】→ 沿绿箭头送往【${player.delivery.dropoffName}】(${player.delivery.timer.toFixed(1)}s) 预计 +¥${player.delivery.baseReward}+小费`;
+        questText = compact
+          ? `🍱 送往${player.delivery.dropoffName} (${player.delivery.timer.toFixed(0)}s) +¥${player.delivery.baseReward}`
+          : `🍱 配送中：【${player.delivery.food}】→ 沿绿箭头送往【${player.delivery.dropoffName}】(${player.delivery.timer.toFixed(1)}s) 预计 +¥${player.delivery.baseReward}+小费`;
       } else if (activePickup) {
-        questText = `📍 待接订单：跟随黄箭头或看右下雷达前往【${activePickup.spot.name}】取餐，跨区送达收入丰厚！`;
+        questText = compact
+          ? `📍 沿黄箭头去【${activePickup.spot.name}】接单跑腿`
+          : `📍 待接订单：跟随黄箭头或看右下雷达前往【${activePickup.spot.name}】取餐，跨区送达收入丰厚！`;
       } else {
-        questText = `💡 左键/Q 抓钩吸金 · 右键/E 96110举报封号 · 按 Tab 放大雷达查看四大街区高薪兼职！`;
+        questText = compact
+          ? `💡 捡废品 · 蹲兼职圈 · 抢真红包 · 举报骗子回血`
+          : `💡 左键/Q 抓钩吸金 · 右键/E 96110举报封号 · 按 Tab 放大雷达查看四大街区高薪兼职！`;
       }
 
       if (questText !== this.lastQuestStr) {
