@@ -18,8 +18,9 @@
       this.world = new WorldMap();
       this.ui = new UIManager();
 
-      this.state = 'menu'; // 'menu' | 'playing' | 'paused' | 'upgrading' | 'celebrating' | 'gameover'
-      this.selectedDifficulty = CONFIG.DIFFICULTIES.normal;
+      // 'menu' | 'playing' | 'paused' | 'upgrading' | 'twist' | 'celebrating' | 'gameover'
+      this.state = 'menu';
+      this.selectedMode = CONFIG.MODES.story;
 
       // Viewport & Camera
       this.dpr = 1;
@@ -28,27 +29,30 @@
       this.zoom = 1;
       this.viewW = this.screenW;
       this.viewH = this.screenH;
-      this.cam = { x: 320, y: 240, w: 1280, h: 720 };
+      this.cam = { x: 1160, y: 990, w: 1280, h: 720 };
       this.shakeTime = 0;
       this.shakeMag = 0;
 
-      // PC Mouse & Keyboard Input State
+      // PC Mouse & Keyboard Input
       this.keys = new Set();
       this.isTouchMode = false;
       this.hasMouse = false;
       this.mouseScreen = { x: this.screenW / 2, y: this.screenH / 2 };
-      this.mouseWorld = { x: 960, y: 720 };
+      this.mouseWorld = { x: 1800, y: 1350 };
 
-      // Touch Joystick (only active if touch used)
+      // Touch Joystick
       this.joyActive = false;
       this.joyPointerId = null;
       this.joyOrigin = { x: 0, y: 0 };
       this.joyVec = { x: 0, y: 0 };
 
-      // Run State
+      // Run & Campaign State
       this.time = 0;
       this.elapsed = 0;
+      this.stage = 1; // Story: 1 (¥1200) -> 2 (¥12000)
       this.money = 0;
+      this.targetMoney = CONFIG.STAGE1_TARGET;
+
       this.player = null;
       this.collectibles = [];
       this.traps = [];
@@ -56,19 +60,27 @@
       this.scammers = [];
       this.projectiles = [];
       this.boss = null;
-      this.bossSpawned = false;
-      this.nearWinNotified = false;
+      this.bossesDefeated = 0;
+
+      // Progression trackers
       this.claimedMilestones = new Set();
+      this.spawnedBossKeys = new Set();
+      this.nearWinNotified = false;
 
-      // Delivery System
+      // Endless Mode dynamic trackers
+      this.endlessUpgradeStep = 0;
+      this.endlessNextUpgradeAt = 320;
+      this.endlessBossWave = 0;
+      this.endlessPrevBossAt = 0;
+      this.endlessNextBossAt = 950;
+
+      // Delivery & Event Timers
       this.activePickup = null;
-      this.deliveryRespawnTimer = 1.0;
-
-      // Timers & Combos
+      this.deliveryRespawnTimer = 0.8;
       this.scammerSpawnTimer = 2.0;
-      this.partTimeTimer = 4.0;
-      this.redPacketTimer = 14.0;
-      this.trapTimer = 7.5;
+      this.partTimeTimer = 2.5;
+      this.redPacketTimer = 16.0;
+      this.trapTimer = 8.0;
       this.empSpawnTimer = 3.5;
       this.celebrateTimer = 0;
       this.bottleCombo = 0;
@@ -101,6 +113,24 @@
       };
     }
 
+    getValueScale() {
+      if (this.selectedMode.id === 'story') {
+        return this.stage === 1 ? 1.0 : CONFIG.STORY_CONFIG.stage2Multiplier;
+      }
+      // Endless smooth scaling
+      return 1.0 + this.bossesDefeated * 0.55 + Math.floor(this.money / 4000) * 0.35;
+    }
+
+    getEnemySpeedMult() {
+      let m = this.selectedMode.scamSpeedMult;
+      if (this.selectedMode.id === 'story' && this.stage === 2) {
+        m *= 1.14;
+      } else if (this.selectedMode.id === 'endless') {
+        m *= Math.min(1.65, 1 + this.bossesDefeated * 0.06);
+      }
+      return m;
+    }
+
     setState(newState) {
       this.state = newState;
       const useCustomCursor = newState === 'playing' && !this.isTouchMode;
@@ -114,8 +144,7 @@
       this.canvas.width = Math.floor(this.screenW * this.dpr);
       this.canvas.height = Math.floor(this.screenH * this.dpr);
 
-      // Crisp 1:1 scale on PC monitors; gentle wider view on narrow screens
-      this.zoom = this.screenW < 640 ? 0.76 : this.screenW < 960 ? 0.88 : 1.0;
+      this.zoom = this.screenW < 640 ? 0.75 : this.screenW < 960 ? 0.88 : 1.0;
       this.viewW = this.screenW / this.zoom;
       this.viewH = this.screenH / this.zoom;
       this.cam.w = this.viewW;
@@ -132,11 +161,8 @@
 
     bindEvents() {
       window.addEventListener('resize', () => this.handleResize());
-
-      // Detect actual touch devices cleanly
       window.addEventListener('touchstart', () => this.enableTouchMode(), { passive: true, once: true });
 
-      // PC Mouse Movement & Tactical Aiming
       window.addEventListener('mousemove', (e) => {
         if (this.isTouchMode) return;
         this.hasMouse = true;
@@ -147,7 +173,6 @@
         }
       });
 
-      // PC Canvas Mouse Clicks: Left-Click = Grab Claw, Right-Click = 96110 Report
       this.canvas.addEventListener('mousedown', (e) => {
         if (this.state !== 'playing' || this.isTouchMode) return;
         audio.init();
@@ -161,23 +186,20 @@
         }
       });
 
-      this.canvas.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-      });
+      this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-      // Difficulty buttons
-      document.querySelectorAll('.diff-card').forEach((card) => {
+      // Mode selection cards
+      document.querySelectorAll('.mode-card').forEach((card) => {
         card.addEventListener('click', () => {
-          document.querySelectorAll('.diff-card').forEach((c) => c.classList.remove('active'));
+          document.querySelectorAll('.mode-card').forEach((c) => c.classList.remove('active'));
           card.classList.add('active');
-          const diffKey = card.getAttribute('data-diff');
-          this.selectedDifficulty = CONFIG.DIFFICULTIES[diffKey] || CONFIG.DIFFICULTIES.normal;
+          const modeKey = card.getAttribute('data-mode');
+          this.selectedMode = CONFIG.MODES[modeKey] || CONFIG.MODES.story;
           audio.init();
           audio.pickupCoin(1);
         });
       });
 
-      // Start & Menu Navigation buttons
       document.getElementById('btn-start').addEventListener('click', () => {
         audio.init();
         this.startNewRun();
@@ -210,7 +232,6 @@
         this.returnToHome();
       });
 
-      // Full PC Keyboard Controls
       window.addEventListener('keydown', (e) => {
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab'].includes(e.code)) {
           if (this.state === 'playing' || this.state === 'paused') e.preventDefault();
@@ -273,7 +294,7 @@
         }
       });
 
-      // Touch Joystick Pointer Events
+      // Touch Joystick
       const joyZone = document.getElementById('joystick-zone');
       const joyBase = document.getElementById('joystick-base');
       const joyKnob = document.getElementById('joystick-knob');
@@ -330,7 +351,7 @@
         if (e.pointerId === this.joyPointerId) this.resetJoystick();
       });
 
-      // Hotbar buttons (clickable on PC & touchable on mobile)
+      // Hotbar buttons
       document.getElementById('btn-dash').addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -388,6 +409,7 @@
 
     startNewRun() {
       this.ui.startScreen.classList.add('hidden');
+      this.ui.twistModal.classList.add('hidden');
       this.ui.upgradeModal.classList.add('hidden');
       this.ui.pauseModal.classList.add('hidden');
       this.ui.resultModal.classList.add('hidden');
@@ -395,15 +417,28 @@
       this.ui.showGameHUD(true);
 
       this.elapsed = 0;
+      this.stage = 1;
       this.money = 0;
+      this.targetMoney = CONFIG.STAGE1_TARGET;
       this.stats = this.createFreshStats();
+
       this.claimedMilestones.clear();
+      this.spawnedBossKeys.clear();
       this.boss = null;
-      this.bossSpawned = false;
+      this.bossesDefeated = 0;
       this.nearWinNotified = false;
 
-      // Spawn Freddy on the central plaza south of the 3-tier fountain
-      this.player = new Player(960, 815, this.selectedDifficulty);
+      // Endless progression init
+      this.endlessUpgradeStep = 0;
+      this.endlessNextUpgradeAt = 320;
+      this.endlessBossWave = 0;
+      this.endlessPrevBossAt = 0;
+      this.endlessNextBossAt = 950;
+
+      this.ui.configureStageMarkers(this.selectedMode.id, 1);
+
+      // Spawn Freddy on Central Fountain Plaza South Walk
+      this.player = new Player(1800, 1465, this.selectedMode);
       this.collectibles = [];
       this.traps = [];
       this.partTimeZones = [];
@@ -416,17 +451,17 @@
       this.lightningBolts = [];
 
       this.activePickup = null;
-      this.deliveryRespawnTimer = 0.6;
+      this.deliveryRespawnTimer = 0.5;
       this.scammerSpawnTimer = 2.2;
-      this.partTimeTimer = 2.5;
-      this.redPacketTimer = 15.0;
+      this.partTimeTimer = 1.5;
+      this.redPacketTimer = 16.0;
       this.trapTimer = 8.0;
-      this.empSpawnTimer = 3.0;
+      this.empSpawnTimer = 3.2;
       this.bottleCombo = 0;
       this.bottleComboTimer = 0;
 
-      for (let i = 0; i < 24; i++) {
-        this.spawnStreetCollectible();
+      for (let i = 0; i < 50; i++) {
+        this.spawnStreetCollectible(i < 16);
       }
       this.spawnDeliveryOrder();
 
@@ -437,8 +472,67 @@
       this.lastFrameTs = performance.now();
       audio.startBgm(false);
 
-      this.ui.pushChat('start', true);
-      this.addFloatingText(this.player.x, this.player.y - 48, '目标：帮 FriedRich 凑齐 ¥1,200！', '#FDE047', 17);
+      if (this.selectedMode.id === 'endless') {
+        this.ui.pushChat('startEndless', true);
+        this.addFloatingText(this.player.x, this.player.y - 48, '♾️ 无尽模式：挑战最高存款！', '#FDE047', 17);
+      } else {
+        this.ui.pushChat('startStage1', true);
+        this.addFloatingText(this.player.x, this.player.y - 48, '第一阶段：凑齐被骗的 ¥1,200！', '#FDE047', 17);
+      }
+    }
+
+    triggerStage1Twist() {
+      this.setState('twist');
+      this.keys.clear();
+      this.resetJoystick();
+      audio.setBossBgm(false);
+      audio.scamHit();
+      this.ui.flashScreen('rgba(244, 63, 94, 0.5)');
+
+      // Clear Stage 1 boss/minions cleanly
+      this.boss = null;
+      this.scammers = [];
+      this.projectiles = [];
+      this.traps = [];
+
+      this.ui.showTwistModal(() => {
+        // Transition to Stage 2: Target ¥12,000!
+        this.stage = 2;
+        this.money = 0;
+        this.targetMoney = CONFIG.STAGE2_TARGET;
+        this.claimedMilestones.clear();
+        this.spawnedBossKeys.clear();
+        this.nearWinNotified = false;
+
+        // Awakening buff for Freddy!
+        this.player.maxHp += 1;
+        this.player.hp = this.player.maxHp;
+        this.player.delivery = null;
+        this.activePickup = null;
+
+        this.ui.configureStageMarkers('story', 2);
+
+        // Refresh collectibles with Stage 2 higher-tier city values
+        this.collectibles = [];
+        for (let i = 0; i < 54; i++) {
+          this.spawnStreetCollectible(i < 18);
+        }
+        this.spawnDeliveryOrder();
+
+        audio.upgradePick();
+        audio.startBgm(false);
+        this.ui.pushChat('startStage2', true);
+        this.addFloatingText(
+          this.player.x,
+          this.player.y - 52,
+          '🔥 彻底醒悟！第二阶段：赚回 ¥12,000！',
+          '#FDE047',
+          19
+        );
+
+        this.setState('playing');
+        this.lastFrameTs = performance.now();
+      });
     }
 
     getMoveInput() {
@@ -490,7 +584,7 @@
         maxLife: 0.26
       });
 
-      // 1. Yank all collectibles inside the directional cone!
+      // 1. Yank collectibles in cone
       let grabbedCount = 0;
       for (const item of this.collectibles) {
         const dx = item.x - px;
@@ -500,7 +594,7 @@
           const itemAng = Math.atan2(dy, dx);
           let diff = Math.abs(itemAng - ang);
           if (diff > Math.PI) diff = Math.PI * 2 - diff;
-          if (diff <= coneHalf || dist < 68) {
+          if (diff <= coneHalf || dist < 70) {
             item.forceYanked = true;
             item.pickupDelay = 0;
             grabbedCount++;
@@ -509,13 +603,13 @@
         }
       }
 
-      // 2. Shatter enemy scam projectiles in front of Freddy!
+      // 2. Shatter enemy projectiles in cone
       let shattered = 0;
       for (const proj of this.projectiles) {
         const dx = proj.x - px;
         const dy = proj.y - py;
         const dist = Math.hypot(dx, dy);
-        if (dist <= range * 0.8) {
+        if (dist <= range * 0.85) {
           const pAng = Math.atan2(dy, dx);
           let diff = Math.abs(pAng - ang);
           if (diff > Math.PI) diff = Math.PI * 2 - diff;
@@ -527,19 +621,39 @@
         }
       }
 
-      // 3. Boost part-time circle work speed if standing inside one!
+      // 3. Optional stun / holo-clone pop if upgraded
+      for (const s of this.scammers) {
+        const dx = s.x - px;
+        const dy = s.y - py;
+        const dist = Math.hypot(dx, dy);
+        if (dist <= range * 0.75) {
+          const sAng = Math.atan2(dy, dx);
+          let diff = Math.abs(sAng - ang);
+          if (diff > Math.PI) diff = Math.PI * 2 - diff;
+          if (diff <= coneHalf) {
+            if (s.isHoloClone) {
+              s.dead = true;
+              this.spawnBurst(s.x, s.y, '#67E8F9', 8);
+            } else if (this.player.grabStuns) {
+              s.stunTime = 1.6;
+            }
+          }
+        }
+      }
+
+      // 4. Boost part-time circle speed
       for (const zone of this.partTimeZones) {
-        if (Math.hypot(zone.x - px, zone.y - py) <= zone.radius + 12) {
-          zone.progress += 0.48;
+        if (Math.hypot(zone.x - px, zone.y - py) <= zone.radius + 14) {
+          zone.progress += 0.52;
           this.addFloatingText(px, py - 38, '⚡ 兼职手速爆发！', '#34D399', 14);
         }
       }
 
       if (grabbedCount > 0) {
         audio.pickupCoin(grabbedCount);
-        this.addFloatingText(px, py - 34, `🧲 顺手牵羊吸取 x${grabbedCount}!`, '#FDE047', 14);
+        this.addFloatingText(px, py - 34, `🧲 吸取 x${grabbedCount}!`, '#FDE047', 14);
       } else if (shattered > 0) {
-        this.addFloatingText(px, py - 34, `🤚 拍碎诈骗弹幕 x${shattered}!`, '#7DD3FC', 14);
+        this.addFloatingText(px, py - 34, `🤚 拍碎弹幕 x${shattered}!`, '#7DD3FC', 14);
       }
     }
 
@@ -550,6 +664,7 @@
       const px = this.player.x;
       const py = this.player.y;
       const rad = this.player.skillRadius;
+      const scale = this.getValueScale();
 
       this.shockwaves.push({
         x: px,
@@ -562,7 +677,6 @@
       });
       this.addFloatingText(px, py - 44, '📢 96110 一键举报脉冲！', '#7DD3FC', 16);
 
-      // Clear scam projectiles inside radius
       for (const proj of this.projectiles) {
         if (Math.hypot(proj.x - px, proj.y - py) <= rad + proj.radius) {
           proj.dead = true;
@@ -570,19 +684,17 @@
         }
       }
 
-      // Purify traps
       let hitSomething = false;
       for (const trap of this.traps) {
         if (Math.hypot(trap.x - px, trap.y - py) <= rad + trap.radius * 0.6) {
           trap.dead = true;
           hitSomething = true;
-          const purifyReward = this.player.eagleEye ? 45 : 22;
+          const purifyReward = Math.round((this.player.eagleEye ? 28 : 12) * scale);
           this.gainMoney(purifyReward, 'bounty', trap.x, trap.y, `净化骗局 +¥${purifyReward}`);
           this.spawnBurst(trap.x, trap.y, '#34D399', 10);
         }
       }
 
-      // Banish scammers
       let banished = 0;
       for (const s of this.scammers) {
         if (Math.hypot(s.x - px, s.y - py) <= rad + s.radius) {
@@ -590,22 +702,22 @@
           banished++;
           hitSomething = true;
           this.stats.reportedCount++;
-          const bounty = this.player.reportBounty;
+          const bounty = Math.round(this.player.reportBounty * scale);
           this.gainMoney(bounty, 'bounty', s.x, s.y, `举报封号 +¥${bounty}!`);
           this.spawnBurst(s.x, s.y, '#38BDF8', 14);
         }
       }
 
-      // Damage Boss if in range
       if (this.boss && !this.boss.dead) {
         const distBoss = Math.hypot(this.boss.x - px, this.boss.y - py);
         if (distBoss <= rad + this.boss.radius) {
-          const dmg = this.player.upgrades.has('megaphone') ? 125 : 85;
+          const dmg = this.player.upgrades.has('megaphone') ? 140 : 90;
           this.boss.takeDamage(dmg);
           this.boss.stunTime = 0.85;
           hitSomething = true;
           this.stats.reportedCount++;
-          this.gainMoney(35, 'bounty', this.boss.x, this.boss.y - 20, '举报重创 +¥35!');
+          const hitBounty = Math.round(22 * scale);
+          this.gainMoney(hitBounty, 'bounty', this.boss.x, this.boss.y - 20, `举报重创 +¥${hitBounty}!`);
           this.spawnBurst(this.boss.x, this.boss.y, '#FACC15', 18);
           if (this.boss.dead) {
             this.handleBossDefeated();
@@ -626,7 +738,7 @@
       if (sourceCategory === 'recycle' || sourceCategory === 'gig' || sourceCategory === 'redpacket') {
         mult = this.player.incomeMult;
       }
-      const finalAmt = Math.round(baseAmount * mult);
+      const finalAmt = Math.max(1, Math.round(baseAmount * mult));
       this.money += finalAmt;
 
       if (sourceCategory === 'recycle') this.stats.recycleEarned += finalAmt;
@@ -635,35 +747,91 @@
       else this.stats.bountyEarned += finalAmt;
 
       const text = customLabel || `+¥${finalAmt}`;
-      const color = finalAmt >= 50 ? '#FDE047' : '#4ADE80';
-      this.addFloatingText(x, y - 16, text, color, finalAmt >= 50 ? 17 : 14);
+      const color = finalAmt >= 80 ? '#FDE047' : '#4ADE80';
+      this.addFloatingText(x, y - 16, text, color, finalAmt >= 80 ? 17 : 14);
 
-      if (!this.nearWinNotified && this.money >= 1100 && this.money < CONFIG.TARGET_MONEY) {
+      if (
+        this.selectedMode.id === 'story' &&
+        this.stage === 2 &&
+        !this.nearWinNotified &&
+        this.money >= 11000 &&
+        this.money < CONFIG.STAGE2_TARGET
+      ) {
         this.nearWinNotified = true;
         this.ui.pushChat('nearWin', true);
       }
 
-      this.checkWinAndMilestones();
+      this.checkProgression();
     }
 
-    checkWinAndMilestones() {
+    checkProgression() {
       if (this.state !== 'playing') return;
 
-      if (this.money >= CONFIG.TARGET_MONEY) {
-        this.triggerVictorySequence();
-        return;
-      }
+      if (this.selectedMode.id === 'story') {
+        if (this.stage === 1) {
+          // Stage 1 Twist at ¥1,200!
+          if (this.money >= CONFIG.STAGE1_TARGET) {
+            this.triggerStage1Twist();
+            return;
+          }
+          // Stage 1 Boss at ¥880 (Jack the Mentor)
+          if (this.money >= CONFIG.STORY_CONFIG.stage1BossMoney && !this.spawnedBossKeys.has('s1_jack')) {
+            this.spawnedBossKeys.add('s1_jack');
+            this.spawnBoss('jack', 1.0, 1.0);
+          }
+          // Stage 1 Upgrade Milestones
+          for (const m of CONFIG.STORY_CONFIG.stage1Milestones) {
+            if (this.money >= m && !this.claimedMilestones.has(m)) {
+              this.claimedMilestones.add(m);
+              this.openUpgradeSelection(m);
+              return;
+            }
+          }
+        } else {
+          // Stage 2 Final Victory at ¥12,000!
+          if (this.money >= CONFIG.STAGE2_TARGET) {
+            this.triggerVictorySequence();
+            return;
+          }
+          // Stage 2 Bosses: Phantom (2800), Freezer404 (6200), Overlord Wang (9600)
+          for (const bCfg of CONFIG.STORY_CONFIG.stage2Bosses) {
+            const key = `s2_${bCfg.bossId}`;
+            if (this.money >= bCfg.money && !this.spawnedBossKeys.has(key) && (!this.boss || this.boss.dead)) {
+              this.spawnedBossKeys.add(key);
+              this.spawnBoss(bCfg.bossId, 1.0, 1.0);
+              break;
+            }
+          }
+          // Stage 2 Upgrade Milestones
+          for (const m of CONFIG.STORY_CONFIG.stage2Milestones) {
+            if (this.money >= m && !this.claimedMilestones.has(m)) {
+              this.claimedMilestones.add(m);
+              this.openUpgradeSelection(m);
+              return;
+            }
+          }
+        }
+      } else {
+        // ENDLESS MODE PROGRESSION
+        if ((!this.boss || this.boss.dead) && this.money >= this.endlessNextBossAt) {
+          const bossOrder = ['jack', 'phantom', 'freezer404', 'wang'];
+          const bossId = bossOrder[this.endlessBossWave % bossOrder.length];
+          const cycle = Math.floor(this.endlessBossWave / bossOrder.length);
+          const hpMult = 1.0 + cycle * 0.65 + this.endlessBossWave * 0.12;
+          const rewardMult = 1.0 + this.endlessBossWave * 0.45;
 
-      if (!this.bossSpawned && this.money >= CONFIG.BOSS_TRIGGER_MONEY) {
-        this.bossSpawned = true;
-        this.spawnBossEncounter();
-      }
+          this.endlessPrevBossAt = this.endlessNextBossAt;
+          this.endlessBossWave++;
+          this.endlessNextBossAt += 1400 + this.endlessBossWave * 750;
 
-      for (const m of CONFIG.MILESTONES) {
-        if (this.money >= m && !this.claimedMilestones.has(m)) {
-          this.claimedMilestones.add(m);
-          this.openUpgradeSelection(m);
-          break;
+          this.spawnBoss(bossId, hpMult, rewardMult);
+        }
+
+        if (this.money >= this.endlessNextUpgradeAt) {
+          const triggerAt = this.endlessNextUpgradeAt;
+          this.endlessUpgradeStep++;
+          this.endlessNextUpgradeAt += 550 + this.endlessUpgradeStep * 450;
+          this.openUpgradeSelection(triggerAt);
         }
       }
     }
@@ -673,15 +841,30 @@
       this.keys.clear();
       this.resetJoystick();
       audio.upgradePick();
-      this.ui.flashScreen('rgba(250, 204, 21, 0.25)');
+      this.ui.flashScreen('rgba(250, 204, 21, 0.22)');
 
       const unowned = CONFIG.UPGRADES.filter((u) => !this.player.upgrades.has(u.id));
-      const pool = unowned.length >= 3 ? [...unowned] : [...CONFIG.UPGRADES];
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
+      let choices = [];
+
+      if (unowned.length >= 3) {
+        const pool = [...unowned];
+        for (let i = pool.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        choices = pool.slice(0, 3);
+      } else {
+        choices = [...unowned];
+        while (choices.length < 3) {
+          choices.push({
+            id: 'mastery_boost',
+            icon: '⭐',
+            title: `全能打工进修 Lv.${this.player.masteryLevel + 1}`,
+            sender: '全群金牌投资团',
+            desc: '所有正经搞钱收入再 +25%、移动速度 +6%，并立即恢复 1 颗心态 ❤️！'
+          });
+        }
       }
-      const choices = pool.slice(0, 3);
 
       this.ui.showUpgradeModal(milestoneVal, choices, (picked) => {
         this.player.applyUpgrade(picked.id);
@@ -695,46 +878,76 @@
         );
         this.setState('playing');
         this.lastFrameTs = performance.now();
-        this.checkWinAndMilestones();
+        this.checkProgression();
       });
     }
 
-    spawnBossEncounter() {
-      const pt = this.world.getRandomWalkablePoint(75, this.player.x, this.player.y, 340);
-      this.boss = new ScamBoss(pt.x, pt.y, this.selectedDifficulty.scamSpeedMult);
+    spawnBoss(bossId, hpMult = 1.0, rewardMult = 1.0) {
+      const pt = this.world.getRandomWalkablePoint(
+        80,
+        this.player.x,
+        this.player.y,
+        340,
+        560,
+        this.player.x,
+        this.player.y
+      );
+      this.boss = new ScamBoss(pt.x, pt.y, bossId, {
+        hpMult,
+        speedMult: this.getEnemySpeedMult(),
+        rewardMult
+      });
+
       audio.bossWarning();
       audio.setBossBgm(true);
       this.addShake(0.45, 9);
-      this.ui.flashScreen('rgba(244, 63, 94, 0.35)');
+      this.ui.flashScreen('rgba(244, 63, 94, 0.34)');
       this.ui.pushChat('bossSpawn', true);
 
-      const empPt = this.world.getRandomWalkablePoint(55, this.player.x, this.player.y, 180);
-      this.collectibles.push(new Collectible(empPt.x, empPt.y, 'emp_pack', 60, { life: 18 }));
+      const empVal = Math.round(45 * this.getValueScale() * this.player.empBonusMult);
+      const empPt = this.world.getRandomWalkablePoint(
+        55,
+        this.player.x,
+        this.player.y,
+        160,
+        360,
+        this.player.x,
+        this.player.y
+      );
+      this.collectibles.push(new Collectible(empPt.x, empPt.y, 'emp_pack', empVal, { life: 20 }));
     }
 
     handleBossDefeated() {
       if (!this.boss) return;
       const bx = this.boss.x;
       const by = this.boss.y;
-      audio.deliveryDone();
-      this.addShake(0.5, 12);
-      this.spawnBurst(bx, by, '#FACC15', 38);
-      this.addFloatingText(bx, by - 34, '💥 刷单总庄家覆灭！追回大批赃款！', '#FDE047', 20);
+      const totalDrop = this.boss.dropTotal;
+      this.bossesDefeated++;
 
+      audio.deliveryDone();
+      audio.setBossBgm(false);
+      this.addShake(0.5, 12);
+      this.spawnBurst(bx, by, '#FACC15', 42);
+      this.ui.pushChat('bossDefeated', true);
+      this.addFloatingText(bx, by - 36, `💥 击溃【${this.boss.name}】！追缴赃款！`, '#FDE047', 20);
+
+      // Instant 40% direct recovery + 6 juicy cash bundles on ground for remaining 60%
+      const directAmt = Math.round(totalDrop * 0.4);
+      const eachBag = Math.max(15, Math.round((totalDrop * 0.6) / 6));
       for (let i = 0; i < 6; i++) {
         const angle = (Math.PI * 2 * i) / 6;
-        this.collectibles.push(new Collectible(bx, by, 'bounty_cash', 45, {
-          vx: Math.cos(angle) * 240,
-          vy: Math.sin(angle) * 240,
-          life: 20
+        this.collectibles.push(new Collectible(bx, by, 'bounty_cash', eachBag, {
+          vx: Math.cos(angle) * 250,
+          vy: Math.sin(angle) * 250,
+          life: 24
         }));
       }
-      this.gainMoney(80, 'bounty', bx, by, '追回本金 +¥80!');
+      this.gainMoney(directAmt, 'bounty', bx, by, `追缴本金 +¥${directAmt}!`);
     }
 
     triggerVictorySequence() {
       this.setState('celebrating');
-      this.celebrateTimer = 1.5;
+      this.celebrateTimer = 1.6;
       this.keys.clear();
       this.resetJoystick();
       audio.stopBgm();
@@ -745,13 +958,14 @@
       if (this.boss && !this.boss.dead) {
         this.lightningBolts.push({
           x1: this.boss.x,
-          y1: this.boss.y - 420,
+          y1: this.boss.y - 440,
           x2: this.boss.x,
           y2: this.boss.y,
           life: 0.65
         });
-        this.spawnBurst(this.boss.x, this.boss.y, '#FACC15', 38);
+        this.spawnBurst(this.boss.x, this.boss.y, '#FACC15', 40);
         this.boss.dead = true;
+        this.bossesDefeated++;
       }
       for (const s of this.scammers) {
         this.spawnBurst(s.x, s.y, '#38BDF8', 10);
@@ -762,8 +976,8 @@
 
       this.addFloatingText(
         this.player.x,
-        this.player.y - 52,
-        '🎉 凑齐 ¥1,200！FriedRich 重夺 Rich 之名！',
+        this.player.y - 54,
+        '🎉 赚回 ¥12,000！FriedRich 完美涅槃！',
         '#FDE047',
         21
       );
@@ -784,7 +998,7 @@
           x: this.player.x,
           y: this.player.y,
           r: 16,
-          maxR: 125,
+          maxR: 130,
           color: '#38BDF8',
           life: 0.28,
           maxLife: 0.28
@@ -806,15 +1020,16 @@
       this.addShake(0.28, 9);
       this.ui.flashScreen('rgba(239, 68, 68, 0.42)');
 
-      const maxLoss = Math.round(48 * this.selectedDifficulty.scamLossMult);
+      const scale = this.getValueScale();
+      const maxLoss = Math.round(28 * scale * this.selectedMode.scamLossMult);
       const actualLoss = Math.min(this.money, maxLoss);
       this.money -= actualLoss;
 
-      if (actualLoss >= 15) {
-        const dropCount = Math.min(3, Math.floor(actualLoss / 15));
-        for (let i = 0; i < dropCount; i++) {
+      if (actualLoss >= 9) {
+        const dropEach = Math.max(3, Math.floor((actualLoss * 0.85) / 3));
+        for (let i = 0; i < 3; i++) {
           const ang = Math.random() * Math.PI * 2;
-          this.collectibles.push(new Collectible(this.player.x, this.player.y, 'dropped_cash', 14, {
+          this.collectibles.push(new Collectible(this.player.x, this.player.y, 'dropped_cash', dropEach, {
             vx: Math.cos(ang) * 270,
             vy: Math.sin(ang) * 270,
             life: 7.5,
@@ -836,24 +1051,33 @@
         setTimeout(() => {
           this.ui.showResultModal({
             won: false,
+            modeId: this.selectedMode.id,
+            stage: this.stage,
             money: this.money,
             elapsed: this.elapsed,
-            difficulty: this.selectedDifficulty,
-            stats: this.stats
+            stats: this.stats,
+            bossesDefeated: this.bossesDefeated
           });
         }, 550);
       }
     }
 
-    spawnStreetCollectible() {
-      const pt = this.world.getRandomWalkablePoint(42);
+    spawnStreetCollectible(nearPlayer = false) {
+      let pt;
+      if (nearPlayer && this.player) {
+        pt = this.world.getRandomWalkablePoint(42, this.player.x, this.player.y, 160, 950, this.player.x, this.player.y);
+      } else {
+        pt = this.world.getRandomWalkablePoint(42);
+      }
+
       const roll = Math.random() * 100;
       let type = 'bottle';
       if (roll > 94) type = 'maotai_bottle';
-      else if (roll > 79) type = 'cash_small';
-      else if (roll > 46) type = 'cardboard';
+      else if (roll > 80) type = 'cash_small';
+      else if (roll > 56) type = 'cardboard';
+      else if (roll > 32) type = 'can';
 
-      this.collectibles.push(new Collectible(pt.x, pt.y, type));
+      this.collectibles.push(new Collectible(pt.x, pt.y, type, null, { valueScale: this.getValueScale() }));
     }
 
     spawnDeliveryOrder() {
@@ -861,7 +1085,7 @@
       this.activePickup = {
         x: spot.x,
         y: spot.y,
-        radius: 40,
+        radius: 42,
         spot
       };
     }
@@ -872,20 +1096,22 @@
       this.activePickup = null;
 
       const candidates = this.world.dropoffSpots.filter(
-        (d) => Math.hypot(d.x - pickup.x, d.y - pickup.y) > 480
+        (d) => Math.hypot(d.x - pickup.x, d.y - pickup.y) > 750
       );
       const drop = candidates[Math.floor(Math.random() * candidates.length)] || this.world.dropoffSpots[0];
       const dist = Math.hypot(drop.x - pickup.x, drop.y - pickup.y);
-      const baseReward = Math.round(84 + dist * 0.025) + this.player.deliveryTipBonus;
+      const scale = this.getValueScale();
+      const baseReward = Math.round((34 + dist * 0.012) * scale * this.player.deliveryRewardMult);
+      const maxTimer = 24.0 + this.player.deliveryBonusTime;
 
       this.player.delivery = {
         food: pickup.spot.food,
         dropoffName: drop.name,
         x: drop.x,
         y: drop.y,
-        radius: 46,
-        timer: 19.0,
-        maxTimer: 19.0,
+        radius: 48,
+        timer: maxTimer,
+        maxTimer,
         baseReward
       };
 
@@ -896,50 +1122,49 @@
 
     triggerRedPacketRain() {
       this.ui.pushChat('redPacketRain', true);
-      this.addFloatingText(this.player.x, this.player.y - 54, '🧧 群友红包雨来袭！小心混入紫皮假包！', '#FBBF24', 17);
+      this.addFloatingText(this.player.x, this.player.y - 54, '🧧 群友红包雨来袭！小心紫皮假包！', '#FBBF24', 17);
 
+      const scale = this.getValueScale();
       for (let i = 0; i < 6; i++) {
-        const pt = this.world.getRandomWalkablePoint(45);
-        const ang = Math.random() * Math.PI * 2;
-        const dist = 130 + Math.random() * 340;
-        const rx = this.player.x + Math.cos(ang) * dist;
-        const ry = this.player.y + Math.sin(ang) * dist;
-        const finalPt = !this.world.isPointInsideBuilding(rx, ry, 34) ? { x: rx, y: ry } : pt;
-        this.collectibles.push(new Collectible(finalPt.x, finalPt.y, 'red_packet', null, { life: 15 }));
+        const pt = this.world.getRandomWalkablePoint(45, null, null, 120, 420, this.player.x, this.player.y);
+        this.collectibles.push(new Collectible(pt.x, pt.y, 'red_packet', null, { life: 16, valueScale: scale }));
       }
 
       for (let i = 0; i < 2; i++) {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = 165 + Math.random() * 260;
-        const tx = this.player.x + Math.cos(ang) * dist;
-        const ty = this.player.y + Math.sin(ang) * dist;
-        if (!this.world.isPointInsideBuilding(tx, ty, 34)) {
-          this.traps.push(new BaitTrap(tx, ty, 'fake_packet'));
-        }
+        const pt = this.world.getRandomWalkablePoint(45, this.player.x, this.player.y, 150, 360, this.player.x, this.player.y);
+        this.traps.push(new BaitTrap(pt.x, pt.y, 'fake_packet'));
       }
     }
 
     spawnScammerWave() {
       const maxScammers = this.boss && !this.boss.dead
-        ? 3
-        : this.money < 250
-          ? 3
-          : this.money < 600
-            ? 5
-            : 7;
+        ? 4
+        : this.stage === 2 || this.selectedMode.id === 'endless'
+          ? 7
+          : this.money < 400
+            ? 4
+            : 6;
 
       if (this.scammers.length >= maxScammers) return;
 
-      const pt = this.world.getRandomWalkablePoint(50, this.player.x, this.player.y, 350);
+      const pt = this.world.getRandomWalkablePoint(
+        50,
+        this.player.x,
+        this.player.y,
+        360,
+        780,
+        this.player.x,
+        this.player.y
+      );
       let type = 'spammer';
       const r = Math.random();
-      if (this.money >= 600 && r < 0.34) {
+      if ((this.stage === 2 || this.money >= 500) && r < 0.34) {
         type = 'freezer';
-      } else if (this.money >= 220 && r < 0.68) {
+      } else if ((this.stage === 2 || this.money >= 220) && r < 0.68) {
         type = 'mentor';
       }
 
-      this.scammers.push(new Scammer(pt.x, pt.y, type, this.selectedDifficulty.scamSpeedMult));
+      this.scammers.push(new Scammer(pt.x, pt.y, type, this.getEnemySpeedMult()));
     }
 
     addShake(duration, magnitude) {
@@ -978,12 +1203,11 @@
 
     updateCamera(lerpFactor) {
       if (!this.player) return;
-      // Subtle PC mouse look-ahead offset for smoother spatial awareness!
       let lookAheadX = 0;
       let lookAheadY = 0;
       if (this.hasMouse && !this.isTouchMode) {
-        lookAheadX = ((this.mouseScreen.x / this.screenW) - 0.5) * 90;
-        lookAheadY = ((this.mouseScreen.y / this.screenH) - 0.5) * 70;
+        lookAheadX = ((this.mouseScreen.x / this.screenW) - 0.5) * 95;
+        lookAheadY = ((this.mouseScreen.y / this.screenH) - 0.5) * 75;
       }
 
       const targetX = this.player.x + lookAheadX - this.viewW / 2;
@@ -1002,10 +1226,10 @@
     update(dt) {
       this.time += dt;
 
-      // Scenic camera pan while in Start Menu so PC background looks alive!
+      // Scenic city camera glide on Start Screen
       if (this.state === 'menu') {
-        const cx = 960 + Math.cos(this.time * 0.22) * 260 - this.viewW / 2;
-        const cy = 720 + Math.sin(this.time * 0.18) * 180 - this.viewH / 2;
+        const cx = 1800 + Math.cos(this.time * 0.16) * 520 - this.viewW / 2;
+        const cy = 1350 + Math.sin(this.time * 0.13) * 360 - this.viewH / 2;
         this.cam.x = Math.max(0, Math.min(Math.max(0, this.world.width - this.viewW), cx));
         this.cam.y = Math.max(0, Math.min(Math.max(0, this.world.height - this.viewH), cy));
         return;
@@ -1052,31 +1276,26 @@
 
       if (this.state === 'celebrating') {
         this.celebrateTimer -= dt;
-        if (Math.random() < 0.35 && this.player) {
+        if (Math.random() < 0.38 && this.player) {
           const colors = ['#FACC15', '#4ADE80', '#38BDF8', '#FB7185'];
           this.spawnBurst(
-            this.player.x + (Math.random() - 0.5) * 260,
-            this.player.y + (Math.random() - 0.5) * 180,
+            this.player.x + (Math.random() - 0.5) * 280,
+            this.player.y + (Math.random() - 0.5) * 190,
             colors[Math.floor(Math.random() * colors.length)],
-            12
+            14
           );
         }
-        this.ui.updateHUD({
-          player: this.player,
-          money: this.money,
-          elapsed: this.elapsed,
-          activePickup: this.activePickup,
-          boss: this.boss,
-          combo: this.bottleCombo
-        });
+        this.refreshHUDState();
         if (this.celebrateTimer <= 0) {
           this.setState('gameover');
           this.ui.showResultModal({
             won: true,
+            modeId: this.selectedMode.id,
+            stage: this.stage,
             money: this.money,
             elapsed: this.elapsed,
-            difficulty: this.selectedDifficulty,
-            stats: this.stats
+            stats: this.stats,
+            bossesDefeated: this.bossesDefeated
           });
         }
         return;
@@ -1090,20 +1309,21 @@
         if (this.bottleComboTimer <= 0) this.bottleCombo = 0;
       }
 
-      // 1. Update Player & Camera & Mouse World Aim
+      // 1. Player & Camera
       const move = this.getMoveInput();
       const playerEvent = this.player.update(dt, move.x, move.y, this.world);
       if (playerEvent === 'delivery_expired') {
-        this.addFloatingText(this.player.x, this.player.y - 38, '⏰ 外卖超时取消了…重接一单！', '#FCA5A5', 14);
-        this.deliveryRespawnTimer = 2.0;
+        this.addFloatingText(this.player.x, this.player.y - 38, '⏰ 外卖超时取消…已刷新新单！', '#FCA5A5', 14);
+        this.deliveryRespawnTimer = 1.5;
       } else if (playerEvent === 'rich_aura_tick') {
-        this.gainMoney(28, 'redpacket', this.player.x, this.player.y - 26, '✨清醒打赏 +¥28!');
+        const tip = Math.round(16 * this.getValueScale());
+        this.gainMoney(tip, 'redpacket', this.player.x, this.player.y - 26, `✨清醒津贴 +¥${tip}!`);
       }
 
       this.updateCamera(Math.min(1, dt * 8.5));
       this.syncMouseWorld();
 
-      // 2. Delivery Pickup & Dropoff checks
+      // 2. Express Delivery System
       if (!this.player.delivery) {
         if (!this.activePickup) {
           this.deliveryRespawnTimer -= dt;
@@ -1120,21 +1340,21 @@
         const del = this.player.delivery;
         const d = Math.hypot(this.player.x - del.x, this.player.y - del.y);
         if (d < this.player.radius + del.radius) {
-          const speedTip = Math.round((del.timer / del.maxTimer) * 34);
+          const speedTip = Math.round((del.timer / del.maxTimer) * (16 * this.getValueScale()) * this.player.deliveryTipMult);
           const total = del.baseReward + speedTip;
           this.player.delivery = null;
-          this.deliveryRespawnTimer = 3.0;
+          this.deliveryRespawnTimer = 2.4;
           audio.deliveryDone();
-          this.spawnBurst(del.x, del.y, '#4ADE80', 20);
+          this.spawnBurst(del.x, del.y, '#4ADE80', 22);
           this.ui.pushChat('deliveryDone');
           this.gainMoney(total, 'gig', del.x, del.y, `🍱 外卖送达 +¥${Math.round(total * this.player.incomeMult)}!`);
         }
       }
 
-      // 3. Collectibles
+      // 3. Street Collectibles across 4 Districts
       const permanentCount = this.collectibles.filter((c) => c.life === null).length;
-      if (permanentCount < 22) {
-        this.spawnStreetCollectible();
+      if (permanentCount < 50) {
+        this.spawnStreetCollectible(Math.random() < 0.55);
       }
 
       for (let i = this.collectibles.length - 1; i >= 0; i--) {
@@ -1142,23 +1362,24 @@
         const picked = item.update(dt, this.player, this.world);
         if (picked) {
           this.bottleCombo++;
-          this.bottleComboTimer = 3.2;
+          this.bottleComboTimer = 3.4;
 
           if (item.type === 'emp_pack') {
             audio.skillReport();
-            this.spawnBurst(item.x, item.y, '#06B6D4', 20);
+            this.spawnBurst(item.x, item.y, '#06B6D4', 22);
             if (this.boss && !this.boss.dead) {
               this.lightningBolts.push({
                 x1: this.player.x,
                 y1: this.player.y,
                 x2: this.boss.x,
                 y2: this.boss.y,
-                life: 0.42
+                life: 0.44
               });
-              this.boss.takeDamage(135);
-              this.boss.stunTime = 0.7;
-              this.addShake(0.25, 8);
-              this.gainMoney(item.value, 'bounty', this.boss.x, this.boss.y, '⚡96110电击追回 +¥60!');
+              const empDmg = Math.round(165 * this.player.empBonusMult);
+              this.boss.takeDamage(empDmg);
+              this.boss.stunTime = 0.8;
+              this.addShake(0.26, 8);
+              this.gainMoney(item.value, 'bounty', this.boss.x, this.boss.y, `⚡96110电击 +¥${item.value}!`);
               if (this.boss && this.boss.dead) {
                 this.handleBossDefeated();
               }
@@ -1173,14 +1394,14 @@
             audio.pickupCoin(2);
             this.money += item.value;
             this.addFloatingText(item.x, item.y - 12, `抢回现金 +¥${item.value}`, '#FDE047', 14);
-            this.checkWinAndMilestones();
+            this.checkProgression();
           } else if (item.type === 'bounty_cash') {
             audio.pickupRedPacket();
             this.gainMoney(item.value, 'bounty', item.x, item.y);
           } else {
             audio.pickupCoin(this.bottleCombo);
             this.spawnBurst(item.x, item.y, item.color, 6);
-            if (this.bottleCombo === 6) {
+            if (this.bottleCombo === 8) {
               this.ui.pushChat('bottleStreak');
             }
             this.gainMoney(item.value, 'recycle', item.x, item.y);
@@ -1191,14 +1412,17 @@
         }
       }
 
-      // 4. Part-time work zones
+      // 4. Part-Time Work Zones
       this.partTimeTimer -= dt;
-      if (this.partTimeTimer <= 0 && this.partTimeZones.length < 2) {
-        this.partTimeTimer = 14.5;
-        const pt = this.world.getRandomWalkablePoint(75, this.player.x, this.player.y, 200);
-        const jobs = ['摇柠檬水日结', '发反诈传单兼职', '夜市端盘子现结'];
+      if (this.partTimeTimer <= 0 && this.partTimeZones.length < 3) {
+        this.partTimeTimer = 13.0;
+        const pt = this.world.getRandomWalkablePoint(80, this.player.x, this.player.y, 220, 950, this.player.x, this.player.y);
+        const jobs = this.stage === 2
+          ? ['CBD高薪外包驻场', '商圈新品试饮促销', '反诈宣传专员日结']
+          : ['摇柠檬水日结', '发反诈传单兼职', '夜市端盘子现结'];
         const title = jobs[Math.floor(Math.random() * jobs.length)];
-        this.partTimeZones.push(new PartTimeZone(pt.x, pt.y, title, 90));
+        const reward = Math.round(42 * this.getValueScale());
+        this.partTimeZones.push(new PartTimeZone(pt.x, pt.y, title, reward));
       }
 
       for (let i = this.partTimeZones.length - 1; i >= 0; i--) {
@@ -1218,32 +1442,28 @@
       // 5. Red Packet Rain
       this.redPacketTimer -= dt;
       if (this.redPacketTimer <= 0) {
-        this.redPacketTimer = 25.0;
+        this.redPacketTimer = 26.0;
         this.triggerRedPacketRain();
       }
 
-      // 6. Phishing traps & Boss EMP packs
+      // 6. Traps & Boss EMP Packs
       this.trapTimer -= dt;
-      if (this.trapTimer <= 0 && this.traps.length < 5) {
-        this.trapTimer = 8.5 / this.selectedDifficulty.spawnRateMult;
-        const ang = Math.random() * Math.PI * 2;
-        const dist = 160 + Math.random() * 260;
-        const tx = this.player.x + Math.cos(ang) * dist;
-        const ty = this.player.y + Math.sin(ang) * dist;
-        if (!this.world.isPointInsideBuilding(tx, ty, 52)) {
-          const kind = Math.random() < 0.55 ? 'phishing_zone' : 'fake_packet';
-          this.traps.push(new BaitTrap(tx, ty, kind));
-        }
+      if (this.trapTimer <= 0 && this.traps.length < 6) {
+        this.trapTimer = 8.2 / this.selectedMode.spawnRateMult;
+        const pt = this.world.getRandomWalkablePoint(52, this.player.x, this.player.y, 170, 460, this.player.x, this.player.y);
+        const kind = Math.random() < 0.55 ? 'phishing_zone' : 'fake_packet';
+        this.traps.push(new BaitTrap(pt.x, pt.y, kind));
       }
 
       if (this.boss && !this.boss.dead) {
         this.empSpawnTimer -= dt;
         const existingEmp = this.collectibles.some((c) => c.type === 'emp_pack');
         if (this.empSpawnTimer <= 0 && !existingEmp) {
-          this.empSpawnTimer = 6.5;
-          const pt = this.world.getRandomWalkablePoint(55, this.player.x, this.player.y, 170);
-          this.collectibles.push(new Collectible(pt.x, pt.y, 'emp_pack', 60, { life: 16 }));
-          this.addFloatingText(pt.x, pt.y - 26, '⚡ 96110反诈脉冲已空投！', '#38BDF8', 14);
+          this.empSpawnTimer = 6.2;
+          const empVal = Math.round(45 * this.getValueScale() * this.player.empBonusMult);
+          const pt = this.world.getRandomWalkablePoint(55, this.player.x, this.player.y, 160, 420, this.player.x, this.player.y);
+          this.collectibles.push(new Collectible(pt.x, pt.y, 'emp_pack', empVal, { life: 18 }));
+          this.addFloatingText(pt.x, pt.y - 26, '⚡ 96110反诈电磁炮空投！', '#38BDF8', 14);
         }
       }
 
@@ -1251,9 +1471,10 @@
         const trap = this.traps[i];
         const triggered = trap.update(dt, this.player);
         if (triggered) {
+          const isIce = trap.kind === 'freeze_grid';
           this.handlePlayerScammed(
-            trap.kind === 'fake_packet' ? '误抢垫付假红包' : '误扫钓鱼二维码',
-            false,
+            trap.kind === 'fake_packet' ? '误抢垫付假红包' : isIce ? '踩中高压冻结电网' : '误扫钓鱼二维码',
+            isIce,
             true
           );
         }
@@ -1263,7 +1484,7 @@
       // 7. Scammers, Boss & Projectiles
       this.scammerSpawnTimer -= dt;
       if (this.scammerSpawnTimer <= 0) {
-        this.scammerSpawnTimer = 3.6 / this.selectedDifficulty.spawnRateMult;
+        this.scammerSpawnTimer = 3.5 / this.selectedMode.spawnRateMult;
         this.spawnScammerWave();
       }
 
@@ -1283,10 +1504,11 @@
           this.world,
           this.projectiles,
           this.traps,
-          this.collectibles
+          this.collectibles,
+          this.scammers
         );
         if (bossHit) {
-          this.handlePlayerScammed('被刷单总庄家连环套路', false, false);
+          this.handlePlayerScammed(`遭${this.boss.name}重创`, false, false);
         }
       }
 
@@ -1299,15 +1521,8 @@
         if (proj.dead) this.projectiles.splice(i, 1);
       }
 
-      // 8. Refresh HUD & PC Minimap Radar
-      this.ui.updateHUD({
-        player: this.player,
-        money: this.money,
-        elapsed: this.elapsed,
-        activePickup: this.activePickup,
-        boss: this.boss,
-        combo: this.bottleCombo
-      });
+      // 8. Refresh HUD & City Radar
+      this.refreshHUDState();
 
       this.ui.renderMinimap(
         this.world,
@@ -1322,6 +1537,23 @@
         },
         this.time
       );
+    }
+
+    refreshHUDState() {
+      this.ui.updateHUD({
+        player: this.player,
+        money: this.money,
+        targetMoney: this.targetMoney,
+        modeId: this.selectedMode.id,
+        stage: this.stage,
+        elapsed: this.elapsed,
+        activePickup: this.activePickup,
+        boss: this.boss,
+        combo: this.bottleCombo,
+        bossesDefeated: this.bossesDefeated,
+        endlessPrevBossAt: this.endlessPrevBossAt,
+        endlessNextBossAt: this.endlessNextBossAt
+      });
     }
 
     renderDeliveryWaypoints(ctx) {
@@ -1340,15 +1572,11 @@
         ctx.fill();
         ctx.stroke();
 
-        // Drawn Takeout Bag Vector Icon
         ctx.fillStyle = '#F59E0B';
         ctx.strokeStyle = '#0F172A';
         ctx.lineWidth = 2;
         ctx.fillRect(p.x - 12, p.y - 8, 24, 20);
         ctx.strokeRect(p.x - 12, p.y - 8, 24, 20);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y - 8, 7, Math.PI, Math.PI * 2);
-        ctx.stroke();
 
         ctx.font = 'bold 13px "Microsoft YaHei", sans-serif';
         ctx.fillStyle = '#FEF08A';
@@ -1376,7 +1604,6 @@
         ctx.fill();
         ctx.stroke();
 
-        // Drawn Location Pin Vector
         ctx.fillStyle = '#22C55E';
         ctx.strokeStyle = '#0F172A';
         ctx.lineWidth = 2;
@@ -1384,10 +1611,6 @@
         ctx.arc(d.x, d.y - 4, 10, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        ctx.arc(d.x, d.y - 4, 4, 0, Math.PI * 2);
-        ctx.fill();
 
         ctx.font = 'bold 13px "Microsoft YaHei", sans-serif';
         ctx.fillStyle = '#86EFAC';
@@ -1408,7 +1631,7 @@
         const dx = tx - this.player.x;
         const dy = ty - this.player.y;
         const dist = Math.hypot(dx, dy);
-        if (dist < 175) return;
+        if (dist < 180) return;
 
         const ang = Math.atan2(dy, dx);
         const orbitR = 58;
@@ -1445,7 +1668,7 @@
       if (this.player.delivery) {
         drawIndicator(this.player.delivery.x, this.player.delivery.y, '#4ADE80', '送达');
       } else if (this.activePickup) {
-        drawIndicator(this.activePickup.x, this.activePickup.y, '#FACC15', '接外卖');
+        drawIndicator(this.activePickup.x, this.activePickup.y, '#FACC15', '取餐');
       }
 
       const emp = this.collectibles.find((c) => c.type === 'emp_pack');
@@ -1456,7 +1679,7 @@
       }
 
       if (this.boss && !this.boss.dead) {
-        drawIndicator(this.boss.x, this.boss.y, '#FB7185', '庄家');
+        drawIndicator(this.boss.x, this.boss.y, '#FB7185', '头目');
       }
     }
 
@@ -1477,19 +1700,24 @@
 
       ctx.translate(-this.cam.x + shakeX, -this.cam.y + shakeY);
 
-      // 1. Detailed 2.5D World Map
+      // 1. 4-District Metropolis Map
       this.world.render(ctx, this.cam, this.time);
 
       if (this.player && this.state !== 'menu') {
-        // 2. Ground Zones & Traps
         for (const z of this.partTimeZones) z.render(ctx, this.time);
         for (const t of this.traps) t.render(ctx, this.time, this.player.eagleEye);
         this.renderDeliveryWaypoints(ctx);
 
-        // 3. Collectibles
-        for (const c of this.collectibles) c.render(ctx, this.time);
+        for (const c of this.collectibles) {
+          if (
+            c.x < this.cam.x - 40 || c.x > this.cam.x + this.cam.w + 40 ||
+            c.y < this.cam.y - 40 || c.y > this.cam.y + this.cam.h + 40
+          ) {
+            continue;
+          }
+          c.render(ctx, this.time);
+        }
 
-        // 4. Directional Grab Claw Cone Waves (PC Left-Click / Q)
         for (const gw of this.grabWaves) {
           const p = 1 - gw.life / gw.maxLife;
           ctx.save();
@@ -1506,7 +1734,6 @@
           ctx.restore();
         }
 
-        // 5. 96110 Report Shockwaves (PC Right-Click / E)
         for (const sw of this.shockwaves) {
           const alpha = sw.life / sw.maxLife;
           ctx.save();
@@ -1522,16 +1749,16 @@
           ctx.restore();
         }
 
-        // 6. Scammers, Boss & Projectiles
         for (const s of this.scammers) s.render(ctx, this.time);
         if (this.boss && !this.boss.dead) this.boss.render(ctx, this.time);
         for (const proj of this.projectiles) proj.render(ctx);
 
-        // 7. Articulated Hero: FriedRich (Freddy) & Compass Indicators
-        this.player.render(ctx, this.time, this.money);
+        const isRichLook =
+          (this.selectedMode.id === 'story' && this.stage === 2 && this.money >= 9000) ||
+          (this.selectedMode.id === 'endless' && this.money >= 6000);
+        this.player.render(ctx, this.time, isRichLook);
         this.renderCompassIndicators(ctx);
 
-        // 8. Lightning Bolts
         for (const lb of this.lightningBolts) {
           ctx.save();
           ctx.strokeStyle = '#38BDF8';
@@ -1549,7 +1776,6 @@
           ctx.restore();
         }
 
-        // 9. Particles & Floating Numbers
         for (const pt of this.particles) {
           ctx.save();
           ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
@@ -1573,7 +1799,6 @@
           ctx.restore();
         }
 
-        // 10. Custom PC Tactical Crosshair
         if (this.state === 'playing' && this.hasMouse && !this.isTouchMode) {
           graphics.drawCrosshair(
             ctx,

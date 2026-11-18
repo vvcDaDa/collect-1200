@@ -14,8 +14,12 @@
       this.heroRankTag = document.getElementById('hero-rank-tag');
       this.hudHearts = document.getElementById('hud-hearts');
       this.hudBuffs = document.getElementById('hud-buffs');
+
+      this.stageLabel = document.getElementById('stage-label');
       this.moneyCurrent = document.getElementById('money-current');
+      this.moneyTarget = document.getElementById('money-target');
       this.moneyBarFill = document.getElementById('money-bar-fill');
+      this.milestoneMarkers = document.getElementById('milestone-markers');
       this.hudTimer = document.getElementById('hud-timer');
       this.comboBadge = document.getElementById('combo-badge');
       this.questBanner = document.getElementById('quest-banner');
@@ -32,6 +36,7 @@
       this.minimapCtx = this.minimapCanvas ? this.minimapCanvas.getContext('2d') : null;
 
       this.startScreen = document.getElementById('start-screen');
+      this.twistModal = document.getElementById('twist-modal');
       this.upgradeModal = document.getElementById('upgrade-modal');
       this.upgradeModalTitle = document.getElementById('upgrade-modal-title');
       this.upgradeCards = document.getElementById('upgrade-cards');
@@ -51,8 +56,8 @@
       this.lastChatTime = 0;
       this.currentReportText = '';
       this.upgradeKeyHandler = null;
+      this.twistKeyHandler = null;
 
-      this.renderIntroChat();
       this.syncMuteButtons();
       this.refreshBestRecord();
       this.bindCopyButton();
@@ -67,28 +72,10 @@
       this.minimapPanel.classList.toggle('expanded');
     }
 
-    renderIntroChat() {
-      const box = document.getElementById('intro-chat-box');
-      if (!box) return;
-      box.innerHTML = '';
-      CONFIG.INTRO_MESSAGES.forEach((m) => {
-        const item = document.createElement('div');
-        item.className = 'qq-msg' + (m.self ? ' is-freddy' : '');
-        item.innerHTML = `
-          <div class="qq-msg-meta">
-            <span class="qq-role-tag">${m.role}</span>
-            <span>${m.sender}</span>
-          </div>
-          <div class="qq-bubble">${m.text}</div>
-        `;
-        box.appendChild(item);
-      });
-    }
-
     syncMuteButtons() {
       const muted = audio.muted;
       if (this.btnMute) this.btnMute.textContent = muted ? '🔇' : '🔊';
-      if (this.btnStartMute) this.btnStartMute.textContent = muted ? '🔇 已静音' : '🔊 音效开启';
+      if (this.btnStartMute) this.btnStartMute.textContent = muted ? '🔇 静音' : '🔊 音效';
     }
 
     formatTime(seconds) {
@@ -98,37 +85,92 @@
       return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
     }
 
-    getBestRecord() {
+    getRecords() {
       try {
-        const raw = localStorage.getItem('freddy1200_best');
-        return raw ? JSON.parse(raw) : null;
+        const raw = localStorage.getItem('freddy_records_v2');
+        return raw ? JSON.parse(raw) : { storyBestTime: null, storyWins: 0, endlessBestMoney: 0 };
       } catch (_) {
-        return null;
+        return { storyBestTime: null, storyWins: 0, endlessBestMoney: 0 };
       }
     }
 
-    saveBestRecord(timeSec, difficultyId, zeroScam) {
-      const prev = this.getBestRecord() || { wins: 0, bestTime: null, zeroScam: false };
-      prev.wins = (prev.wins || 0) + 1;
-      if (prev.bestTime === null || timeSec < prev.bestTime) {
-        prev.bestTime = timeSec;
-        prev.bestDiff = difficultyId;
+    saveStoryWin(timeSec) {
+      const rec = this.getRecords();
+      rec.storyWins = (rec.storyWins || 0) + 1;
+      if (rec.storyBestTime === null || timeSec < rec.storyBestTime) {
+        rec.storyBestTime = timeSec;
       }
-      if (zeroScam) prev.zeroScam = true;
       try {
-        localStorage.setItem('freddy1200_best', JSON.stringify(prev));
+        localStorage.setItem('freddy_records_v2', JSON.stringify(rec));
       } catch (_) {}
       this.refreshBestRecord();
     }
 
+    saveEndlessScore(moneyVal) {
+      const rec = this.getRecords();
+      const m = Math.floor(moneyVal);
+      const isNewRecord = m > (rec.endlessBestMoney || 0);
+      if (isNewRecord) {
+        rec.endlessBestMoney = m;
+        try {
+          localStorage.setItem('freddy_records_v2', JSON.stringify(rec));
+        } catch (_) {}
+      }
+      this.refreshBestRecord();
+      return isNewRecord;
+    }
+
     refreshBestRecord() {
-      const rec = this.getBestRecord();
-      if (!rec || rec.bestTime === null) {
-        this.bestRecordText.textContent = '🏆 本机最佳纪录：暂无通关记录，快来帮 FriedRich 首通回本！';
+      const rec = this.getRecords();
+      const storyStr = rec.storyBestTime !== null
+        ? `${this.formatTime(rec.storyBestTime)} (通关${rec.storyWins}次)`
+        : '暂无通关';
+      const endlessStr = `¥${(rec.endlessBestMoney || 0).toLocaleString()}`;
+      this.bestRecordText.textContent = `🏆 剧情最快纪录：${storyStr}   |   ♾️ 无尽最高存款：${endlessStr}`;
+    }
+
+    configureStageMarkers(modeId, stage) {
+      if (!this.milestoneMarkers) return;
+      this.milestoneMarkers.innerHTML = '';
+
+      if (modeId === 'endless') {
+        this.stageLabel.textContent = '♾️ 无尽搞钱挑战';
+        return;
+      }
+
+      if (stage === 1) {
+        this.stageLabel.textContent = '🎯 第一阶段 · 攒回 1200';
+        this.moneyTarget.textContent = '¥1,200';
+        const pins = [
+          { val: 280, text: '280', boss: false },
+          { val: 650, text: '650', boss: false },
+          { val: 880, text: 'BOSS', boss: true }
+        ];
+        pins.forEach((p) => {
+          const dot = document.createElement('div');
+          dot.className = 'milestone-dot' + (p.boss ? ' boss-dot' : '');
+          dot.style.left = `${((p.val / CONFIG.STAGE1_TARGET) * 100).toFixed(1)}%`;
+          dot.innerHTML = `<span>${p.text}</span>`;
+          this.milestoneMarkers.appendChild(dot);
+        });
       } else {
-        const diffLabel = rec.bestDiff === 'hard' ? '地狱速通' : '互助模式';
-        const badge = rec.zeroScam ? ' · 🏅【0被骗金身】' : '';
-        this.bestRecordText.textContent = `🏆 最快纪录：${this.formatTime(rec.bestTime)} (${diffLabel}) · 累计拯救 Freddy ${rec.wins} 次${badge}`;
+        this.stageLabel.textContent = '🔥 第二阶段 · 追回 12000';
+        this.moneyTarget.textContent = '¥12,000';
+        const pins = [
+          { val: 1800, text: '1.8k', boss: false },
+          { val: 2800, text: '魅影', boss: true },
+          { val: 4500, text: '4.5k', boss: false },
+          { val: 6200, text: '404', boss: true },
+          { val: 7800, text: '7.8k', boss: false },
+          { val: 9600, text: '总庄家', boss: true }
+        ];
+        pins.forEach((p) => {
+          const dot = document.createElement('div');
+          dot.className = 'milestone-dot' + (p.boss ? ' boss-dot' : '');
+          dot.style.left = `${((p.val / CONFIG.STAGE2_TARGET) * 100).toFixed(1)}%`;
+          dot.innerHTML = `<span>${p.text}</span>`;
+          this.milestoneMarkers.appendChild(dot);
+        });
       }
     }
 
@@ -144,7 +186,7 @@
 
     pushChat(category, force = false) {
       const now = performance.now();
-      if (!force && now - this.lastChatTime < 2200) return;
+      if (!force && now - this.lastChatTime < 2300) return;
 
       let entry = null;
       if (typeof category === 'string') {
@@ -156,7 +198,7 @@
       }
 
       this.lastChatTime = now;
-      if (force || Math.random() < 0.7) {
+      if (force || Math.random() < 0.65) {
         audio.qqNotify();
       }
 
@@ -185,7 +227,7 @@
       this.screenFlash.style.opacity = '1';
       setTimeout(() => {
         this.screenFlash.style.opacity = '0';
-      }, 180);
+      }, 200);
     }
 
     updateSlotCd(overlayEl, textEl, cd, maxCd) {
@@ -201,46 +243,40 @@
     }
 
     updateHUD(state) {
-      const { player, money, elapsed, activePickup, boss, combo } = state;
+      const { player, money, targetMoney, modeId, stage, elapsed, activePickup, boss, combo, endlessNextBossAt, endlessPrevBossAt } = state;
 
-      // Money & progress bar
       const roundedMoney = Math.floor(money);
-      if (roundedMoney !== this.lastMoneyVal) {
-        this.lastMoneyVal = roundedMoney;
-        this.moneyCurrent.textContent = `¥${roundedMoney}`;
-        const pct = Math.min(100, (roundedMoney / CONFIG.TARGET_MONEY) * 100);
-        this.moneyBarFill.style.width = `${pct.toFixed(1)}%`;
+      this.moneyCurrent.textContent = `¥${roundedMoney.toLocaleString()}`;
 
-        if (roundedMoney < 250) {
-          this.heroRankTag.textContent = 'Fried状态·痛失1200';
-        } else if (roundedMoney < 600) {
-          this.heroRankTag.textContent = '努力搬砖·回血中';
-        } else if (roundedMoney < 1000) {
-          this.heroRankTag.textContent = '渐入佳境·准Rich';
-        } else {
-          this.heroRankTag.textContent = '冲刺1200·决战庄家!';
-        }
+      if (modeId === 'endless') {
+        this.moneyTarget.textContent = `Boss波 ¥${endlessNextBossAt.toLocaleString()}`;
+        const span = Math.max(100, endlessNextBossAt - endlessPrevBossAt);
+        const pct = Math.min(100, Math.max(0, ((roundedMoney - endlessPrevBossAt) / span) * 100));
+        this.moneyBarFill.style.width = `${pct.toFixed(1)}%`;
+        this.heroRankTag.textContent = `无尽生存 · 击败Boss ${state.bossesDefeated}`;
+      } else {
+        const pct = Math.min(100, (roundedMoney / targetMoney) * 100);
+        this.moneyBarFill.style.width = `${pct.toFixed(1)}%`;
+        this.heroRankTag.textContent = stage === 1 ? '第一幕 · 攒1200' : '第二幕 · 追回12000';
       }
 
-      // Combo badge
       if (combo >= 2) {
         this.comboBadge.classList.remove('hidden');
-        this.comboBadge.textContent = `搞钱连击 x${combo}`;
+        this.comboBadge.textContent = `连收 x${combo}`;
       } else {
         this.comboBadge.classList.add('hidden');
       }
 
-      // Avatar expression
+      const isRich = (modeId === 'story' && stage === 2 && roundedMoney >= 8000) || (modeId === 'endless' && roundedMoney >= 5000);
       let avatar = '😅';
       if (player.mood === 'hurt') avatar = '😱';
-      else if (roundedMoney >= 1200) avatar = '👑';
-      else if (player.mood === 'cool' || roundedMoney >= 850) avatar = '😎';
-      else if (roundedMoney >= 400) avatar = '😤';
+      else if (modeId === 'story' && stage === 2 && roundedMoney >= 12000) avatar = '👑';
+      else if (player.mood === 'cool' || isRich) avatar = '😎';
+      else if (stage === 2 || roundedMoney >= 500) avatar = '😤';
       if (this.hudAvatarFace && this.hudAvatarFace.textContent !== avatar) {
         this.hudAvatarFace.textContent = avatar;
       }
 
-      // Hearts + Shield
       let heartsStr = '';
       for (let i = 0; i < player.maxHp; i++) {
         heartsStr += i < player.hp ? '❤️' : '🖤';
@@ -251,41 +287,40 @@
         this.hudHearts.textContent = heartsStr;
       }
 
-      // Upgrade icons
       let buffsStr = '';
       CONFIG.UPGRADES.forEach((u) => {
         if (player.upgrades.has(u.id)) buffsStr += u.icon + ' ';
       });
+      if (player.masteryLevel > 0) {
+        buffsStr += `⭐+${player.masteryLevel}`;
+      }
       if (buffsStr !== this.lastBuffsStr) {
         this.lastBuffsStr = buffsStr;
         this.hudBuffs.textContent = buffsStr;
       }
 
-      // Timer
       const tStr = this.formatTime(elapsed);
       if (tStr !== this.lastTimeStr) {
         this.lastTimeStr = tStr;
         this.hudTimer.textContent = tStr;
       }
 
-      // 3-Slot Hotbar Cooldowns
       this.updateSlotCd(this.dashCdOverlay, this.dashCdText, player.dashCd, player.dashMaxCd);
       this.updateSlotCd(this.grabCdOverlay, this.grabCdText, player.grabCd, player.grabMaxCd);
       this.updateSlotCd(this.skillCdOverlay, this.skillCdText, player.skillCd, player.skillMaxCd);
 
-      // Quest / Boss Banner
       let questText = '';
       let questClass = 'quest-banner';
       if (boss && !boss.dead) {
         questClass = 'quest-banner boss';
-        questText = `⚠️ 【境外刷单总庄家】阻击中 (HP ${Math.ceil(boss.hp)}/${boss.maxHp})！捡 ⚡96110电磁炮、按右键/E举报，或直接凑满 ¥1200 制裁他！`;
+        questText = `🚨 头目战【${boss.name}】(HP ${Math.ceil(boss.hp)}/${boss.maxHp})！拾取 ⚡96110电磁炮 或按右键/E制裁他，击败可追回 ¥${boss.dropTotal}！`;
       } else if (player.delivery) {
         questClass = 'quest-banner urgent';
         questText = `🍱 配送中：【${player.delivery.food}】→ 沿绿箭头送往【${player.delivery.dropoffName}】(${player.delivery.timer.toFixed(1)}s) 预计 +¥${player.delivery.baseReward}+小费`;
       } else if (activePickup) {
-        questText = `📍 待接跑腿单：跟随黄箭头或看右下雷达前往【${activePickup.spot.name}】取餐，单笔可赚 ¥90~¥135！`;
+        questText = `📍 待接订单：跟随黄箭头或看右下雷达前往【${activePickup.spot.name}】取餐，跨区送达收入丰厚！`;
       } else {
-        questText = `💡 左键/Q 朝准星抓钩吸金 · 右键/E 96110举报骗子领赏 · 踩绿色兼职圈日结回血！`;
+        questText = `💡 左键/Q 抓钩吸金 · 右键/E 96110举报封号 · 按 Tab 放大雷达查看四大街区高薪兼职！`;
       }
 
       if (questText !== this.lastQuestStr) {
@@ -304,45 +339,59 @@
       const sx = mw / world.width;
       const sy = mh / world.height;
 
-      // Base map background
-      ctx.fillStyle = '#0F172A';
+      ctx.fillStyle = '#0B1120';
       ctx.fillRect(0, 0, mw, mh);
 
+      // 4 subtle district tints on radar
+      ctx.fillStyle = '#291E1C';
+      ctx.fillRect(0, 0, mw / 2, mh / 2);
+      ctx.fillStyle = '#19173B';
+      ctx.fillRect(mw / 2, 0, mw / 2, mh / 2);
+      ctx.fillStyle = '#172922';
+      ctx.fillRect(0, mh / 2, mw / 2, mh / 2);
       ctx.fillStyle = '#1E293B';
-      ctx.fillRect(
-        world.padding * sx,
-        world.padding * sy,
-        (world.width - world.padding * 2) * sx,
-        (world.height - world.padding * 2) * sy
-      );
+      ctx.fillRect(mw / 2, mh / 2, mw / 2, mh / 2);
 
-      // Roads on minimap
+      // Roads
       ctx.fillStyle = '#334155';
-      ctx.fillRect(world.padding * sx, 430 * sy, (world.width - world.padding * 2) * sx, 130 * sy);
-      ctx.fillRect(world.padding * sx, 880 * sy, (world.width - world.padding * 2) * sx, 130 * sy);
-      ctx.fillRect(520 * sx, world.padding * sy, 130 * sx, (world.height - world.padding * 2) * sy);
-      ctx.fillRect(1270 * sx, world.padding * sy, 130 * sx, (world.height - world.padding * 2) * sy);
+      for (const r of world.hRoads) {
+        ctx.fillRect(world.padding * sx, r.y * sy, (world.width - world.padding * 2) * sx, r.h * sy);
+      }
+      for (const r of world.vRoads) {
+        ctx.fillRect(r.x * sx, world.padding * sy, r.w * sx, (world.height - world.padding * 2) * sy);
+      }
 
-      // Central fountain
+      // Fountain & Koi Pond
       ctx.fillStyle = '#0284C7';
       ctx.beginPath();
-      ctx.arc(world.fountain.x * sx, world.fountain.y * sy, 6, 0, Math.PI * 2);
+      ctx.arc(world.fountain.x * sx, world.fountain.y * sy, 4, 0, Math.PI * 2);
       ctx.fill();
 
-      // Buildings
+      ctx.fillStyle = '#0D9488';
+      ctx.beginPath();
+      ctx.ellipse(
+        world.koiPond.x * sx,
+        world.koiPond.y * sy,
+        world.koiPond.rx * sx,
+        world.koiPond.ry * sy,
+        0, 0, Math.PI * 2
+      );
+      ctx.fill();
+
+      // 14 Buildings
       for (const b of world.buildings) {
         ctx.fillStyle = b.roofColor;
         ctx.fillRect(b.x * sx, b.y * sy, b.w * sx, b.h * sy);
       }
 
-      // Collectibles (subtle green/gold dots; highlight red packets & EMP)
+      // EMP & Red Packets
       for (const c of state.collectibles) {
         if (c.type === 'emp_pack') {
           ctx.fillStyle = '#38BDF8';
           ctx.fillRect(c.x * sx - 2.5, c.y * sy - 2.5, 5, 5);
         } else if (c.type === 'red_packet') {
           ctx.fillStyle = '#FACC15';
-          ctx.fillRect(c.x * sx - 2, c.y * sy - 2, 4, 4);
+          ctx.fillRect(c.x * sx - 1.5, c.y * sy - 1.5, 3.5, 3.5);
         }
       }
 
@@ -351,11 +400,11 @@
         ctx.strokeStyle = '#34D399';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(z.x * sx, z.y * sy, 5, 0, Math.PI * 2);
+        ctx.arc(z.x * sx, z.y * sy, 4.5, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // Active Delivery Pickup or Dropoff pulse
+      // Active Delivery Pickup or Dropoff
       const pulse = 3.5 + Math.sin(time * 8) * 1.5;
       if (state.player.delivery) {
         ctx.fillStyle = '#4ADE80';
@@ -369,13 +418,12 @@
         ctx.fill();
       }
 
-      // Scammers
+      // Scammers & Boss
       ctx.fillStyle = '#E879F9';
       for (const s of state.scammers) {
-        ctx.fillRect(s.x * sx - 1.5, s.y * sy - 1.5, 3, 3);
+        ctx.fillRect(s.x * sx - 1.2, s.y * sy - 1.2, 2.5, 2.5);
       }
 
-      // Boss
       if (state.boss && !state.boss.dead) {
         ctx.fillStyle = '#F43F5E';
         ctx.beginPath();
@@ -383,28 +431,59 @@
         ctx.fill();
       }
 
-      // Camera viewport box
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+      // Camera box
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(
-        state.cam.x * sx,
-        state.cam.y * sy,
-        state.cam.w * sx,
-        state.cam.h * sy
-      );
+      ctx.strokeRect(state.cam.x * sx, state.cam.y * sy, state.cam.w * sx, state.cam.h * sy);
 
-      // Player (Freddy) bright beacon
+      // Player dot
       ctx.fillStyle = '#FFFFFF';
       ctx.strokeStyle = '#38BDF8';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(state.player.x * sx, state.player.y * sy, 4, 0, Math.PI * 2);
+      ctx.arc(state.player.x * sx, state.player.y * sy, 3.8, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
 
+    showTwistModal(onEnterStage2) {
+      const tw = CONFIG.TWIST_STORY;
+      document.getElementById('twist-badge').textContent = tw.badge;
+      document.getElementById('twist-title').textContent = tw.title;
+      const list = document.getElementById('twist-story-list');
+      list.innerHTML = '';
+      tw.lines.forEach((l) => {
+        const div = document.createElement('div');
+        div.className = `twist-line ${l.type}`;
+        div.innerHTML = `<strong>${l.speaker}</strong>${l.text}`;
+        list.appendChild(div);
+      });
+      document.getElementById('twist-awaken-box').textContent = tw.awakenText;
+
+      const btn = document.getElementById('btn-enter-stage2');
+      const proceed = () => {
+        btn.onclick = null;
+        if (this.twistKeyHandler) {
+          window.removeEventListener('keydown', this.twistKeyHandler);
+          this.twistKeyHandler = null;
+        }
+        this.twistModal.classList.add('hidden');
+        onEnterStage2();
+      };
+
+      btn.onclick = proceed;
+      this.twistKeyHandler = (e) => {
+        if (e.code === 'Enter') {
+          e.preventDefault();
+          proceed();
+        }
+      };
+      window.addEventListener('keydown', this.twistKeyHandler);
+      this.twistModal.classList.remove('hidden');
+    }
+
     showUpgradeModal(milestoneVal, choices, onPick) {
-      this.upgradeModalTitle.textContent = `已攒够 ¥${milestoneVal}！群友发来强力支援（三选一）`;
+      this.upgradeModalTitle.textContent = `攒钱突破 ¥${milestoneVal.toLocaleString()}！群友送来支援（三选一）`;
       this.upgradeCards.innerHTML = '';
 
       const finishPick = (upg) => {
@@ -441,68 +520,72 @@
     }
 
     showResultModal(data) {
-      const { won, money, elapsed, difficulty, stats } = data;
+      const { won, modeId, stage, money, elapsed, stats, bossesDefeated } = data;
 
       const badge = document.getElementById('result-badge');
       const title = document.getElementById('result-title');
       const sub = document.getElementById('result-subtitle');
       const honorEl = document.getElementById('result-honor');
+      const mFloor = Math.floor(money);
 
       let honor = '';
-      if (won) {
+      if (modeId === 'endless') {
+        const isNewRec = this.saveEndlessScore(mFloor);
         badge.className = 'result-badge';
-        badge.textContent = '🎉 回血大成功 · 彻底上岸';
-        title.textContent = `恭喜 FriedRich 凑齐 ¥${Math.floor(money)}！`;
-        sub.textContent = `告别 Fried（被炸糊），Freddy 靠双手和群友支援重夺 Rich 之名！`;
+        badge.textContent = isNewRec ? '🏆 无尽新纪录诞生！' : '♾️ 无尽模式结算';
+        title.textContent = `无尽存款定格：¥${mFloor.toLocaleString()}`;
+        sub.textContent = `Freddy 在四大街区坚持了 ${this.formatTime(elapsed)}，累计击溃 ${bossesDefeated} 位电诈大头目！`;
 
-        if (stats.scammedCount === 0) {
-          honor = '🏆【一毛不拔·人间清醒反诈神】';
-        } else if (elapsed <= 150 && stats.scammedCount <= 1) {
-          honor = '⚡【闪电骑手·城中村打工皇帝】';
-        } else if (stats.reportedCount >= 6) {
-          honor = '🚓【96110编外荣誉反诈先锋】';
-        } else {
-          honor = '💪【痛改前非·满血复活大冤种】';
-        }
+        if (mFloor >= 25000) honor = '👑【城市商业巨鳄·真Rich传说】';
+        else if (mFloor >= 12000) honor = '⚡【反诈赏金猎人·万元户】';
+        else if (mFloor >= 3000) honor = '🛵【四大街区跑腿单王】';
+        else honor = '🧹【街头勤恳回血打工人】';
+      } else if (won) {
+        this.saveStoryWin(elapsed);
+        badge.className = 'result-badge';
+        badge.textContent = '🎉 两幕剧情完美通关';
+        title.textContent = `成功赚回 ¥${mFloor.toLocaleString()}！彻底上岸！`;
+        sub.textContent = `从痛失 1200 到再被骗 12000，Freddy 大彻大悟横扫四大电诈头目，重夺 Rich 之名！`;
 
-        this.saveBestRecord(elapsed, difficulty.id, stats.scammedCount === 0);
+        if (stats.scammedCount === 0) honor = '🏆【一毛不拔·人间清醒反诈神】';
+        else if (bossesDefeated >= 4) honor = '🚓【连端四窝·96110荣誉先锋】';
+        else honor = '💪【浴火重生·涅槃翻盘大冤种】';
       } else {
         badge.className = 'result-badge lose';
-        badge.textContent = '💸 心态崩盘 · 饮恨退群';
-        const diffShort = Math.max(0, CONFIG.TARGET_MONEY - Math.floor(money));
-        title.textContent = `呜呜！Freddy 心态归零自闭了…`;
-        sub.textContent = `本局攒到 ¥${Math.floor(money)}，距离回本 ¥1,200 只差 ¥${diffShort}！`;
-
-        if (money >= 900) {
-          honor = '😭【功败垂成·差一点就变回Rich】';
-        } else if (stats.scammedCount >= 5) {
-          honor = '🤡【行走的韭菜·全熟FriedRich】';
-        } else {
-          honor = '🧹【天桥底下资深瓶盖收藏家】';
-        }
+        badge.textContent = stage === 1 ? '💸 第一阶段崩盘' : '💸 第二阶段功亏一篑';
+        const goal = stage === 1 ? CONFIG.STAGE1_TARGET : CONFIG.STAGE2_TARGET;
+        const shortBy = Math.max(0, goal - mFloor);
+        title.textContent = `Freddy 心态归零自闭了…`;
+        sub.textContent = `倒在了第${stage === 1 ? '一' : '二'}阶段（当前 ¥${mFloor.toLocaleString()}，距目标还差 ¥${shortBy.toLocaleString()}）`;
+        honor = stage === 2 ? '😭【身负12000巨债·全熟FriedRich】' : '🤡【轻信刷单·痛失1200大冤种】';
       }
 
       honorEl.textContent = honor;
-      document.getElementById('stat-money').textContent = `¥${Math.floor(money)}`;
+      document.getElementById('stat-money').textContent = `¥${mFloor.toLocaleString()}`;
       document.getElementById('stat-time').textContent = this.formatTime(elapsed);
-      document.getElementById('stat-recycle').textContent = `¥${Math.floor(stats.recycleEarned)}`;
-      document.getElementById('stat-gig').textContent = `¥${Math.floor(stats.gigEarned)}`;
-      document.getElementById('stat-redpacket').textContent = `¥${Math.floor(stats.redPacketEarned)}`;
+      document.getElementById('stat-recycle').textContent = `¥${Math.floor(stats.recycleEarned).toLocaleString()}`;
+      document.getElementById('stat-gig').textContent = `¥${Math.floor(stats.gigEarned).toLocaleString()}`;
+      document.getElementById('stat-bosses').textContent = `${bossesDefeated}位`;
       document.getElementById('stat-scam-ratio').textContent = `${stats.reportedCount}次 / ${stats.scammedCount}次`;
 
       const tip = CONFIG.ANTI_SCAM_TIPS[Math.floor(Math.random() * CONFIG.ANTI_SCAM_TIPS.length)];
       document.getElementById('result-tip').textContent = tip;
 
       const urlStr = window.location.href.split('#')[0];
-      if (won) {
+      if (modeId === 'endless') {
         this.currentReportText =
-          `【拯救FriedRich战报】我用时 ${this.formatTime(elapsed)} 成功帮群友 FriedRich (Freddy) 凑齐了被刷单骗走的 ¥1200（实收 ¥${Math.floor(money)}）！\n` +
-          `📊 举报骗子 ${stats.reportedCount} 次 | 不慎被骗 ${stats.scammedCount} 次 | 获封称号 ${honor}\n` +
-          `🛡️ 谨记：先垫付做任务的100%是诈骗！快来帮 Freddy 回血 👉 ${urlStr}`;
+          `【拯救FriedRich·无尽战报】我在无尽模式帮群友 FriedRich (Freddy) 狂赚 ¥${mFloor.toLocaleString()}！\n` +
+          `⏱️ 存活 ${this.formatTime(elapsed)} | 击溃电诈Boss ${bossesDefeated} 位 | 称号 ${honor}\n` +
+          `来挑战我的最高存款纪录 👉 ${urlStr}`;
+      } else if (won) {
+        this.currentReportText =
+          `【拯救FriedRich·通关战报】历经从被骗 ¥1200 到连环套路被骗 ¥12000，我用时 ${this.formatTime(elapsed)} 帮 FriedRich (Freddy) 彻底赚回 ¥${mFloor.toLocaleString()} 完美上岸！\n` +
+          `📊 击溃头目 ${bossesDefeated} 位 | 举报骗子 ${stats.reportedCount} 次 | 称号 ${honor}\n` +
+          `快来体验两幕反诈大作战 👉 ${urlStr}`;
       } else {
         this.currentReportText =
-          `【拯救FriedRich战报】惨！我带 FriedRich (Freddy) 打工攒到了 ¥${Math.floor(money)}，还差 ¥${Math.max(0, 1200 - Math.floor(money))} 回本时被电诈分子骗崩心态了 😭\n` +
-          `📊 获封称号 ${honor} | 群友们快来搭把手帮他凑齐 1200 👉 ${urlStr}`;
+          `【拯救FriedRich·战报】惨！我在剧情第${stage}阶段带 FriedRich (Freddy) 攒到了 ¥${mFloor.toLocaleString()}，不小心心态崩盘了 😭\n` +
+          `群友们快来搭把手帮他回本 👉 ${urlStr}`;
       }
 
       this.resultModal.classList.remove('hidden');

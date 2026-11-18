@@ -7,186 +7,257 @@
     HERO_NAME: 'FriedRich',
     HERO_NICK: 'Freddy',
     HERO_FULL: 'FriedRich (Freddy)',
-    TARGET_MONEY: 1200,
+
+    STAGE1_TARGET: 1200,
+    STAGE2_TARGET: 12000,
 
     WORLD: {
-      WIDTH: 1920,
-      HEIGHT: 1440,
-      PADDING: 56
+      WIDTH: 3600,
+      HEIGHT: 2700,
+      PADDING: 64
     },
 
-    MILESTONES: [250, 550, 850],
-    BOSS_TRIGGER_MONEY: 1000,
+    STORY_CONFIG: {
+      stage1Milestones: [280, 650],
+      stage1BossMoney: 880,
+      stage2Milestones: [1800, 4500, 7800],
+      stage2Bosses: [
+        { money: 2800, bossId: 'phantom' },
+        { money: 6200, bossId: 'freezer404' },
+        { money: 9600, bossId: 'wang' }
+      ],
+      stage2Multiplier: 3.2
+    },
 
-    DIFFICULTIES: {
-      normal: {
-        id: 'normal',
-        name: '群友互助模式',
-        badge: '推荐',
-        desc: '初始 5 颗心态 ❤️ · 群友支援充足 · 稳步帮 Freddy 凑齐 ¥1200',
+    BOSS_PROFILES: {
+      jack: {
+        id: 'jack',
+        name: '金牌派单总监 · 杰克导师',
+        title: '连环联单忽悠王',
+        maxHp: 380,
+        radius: 34,
+        speed: 132,
+        dropTotal: 260
+      },
+      phantom: {
+        id: 'phantom',
+        name: 'AI 拟声千面客服 · 魅影姬',
+        title: '甜言蜜语杀猪盘核心',
+        maxHp: 620,
+        radius: 38,
+        speed: 125,
+        dropTotal: 1150
+      },
+      freezer404: {
+        id: 'freezer404',
+        name: '黑客洗钱巨兽 · 冻结者404',
+        title: '账户异常解冻金收割机',
+        maxHp: 820,
+        radius: 44,
+        speed: 112,
+        dropTotal: 1650
+      },
+      wang: {
+        id: 'wang',
+        name: '境外刷单总庄家 · 王总',
+        title: '黄金赌城终极幕后黑手',
+        maxHp: 1100,
+        radius: 48,
+        speed: 122,
+        dropTotal: 2400
+      }
+    },
+
+    MODES: {
+      story: {
+        id: 'story',
+        name: '剧情模式',
+        tag: '两幕完整战役',
+        desc: '第一幕攒回被骗的 ¥1,200 → 轻信返利再被骗 ¥12,000 → 大彻大悟横跨全城追回 ¥12,000！',
         maxHp: 5,
         scamSpeedMult: 1.0,
         scamLossMult: 1.0,
         spawnRateMult: 1.0
       },
-      hard: {
-        id: 'hard',
-        name: '地狱防诈速通',
-        badge: '挑战',
-        desc: '初始 3 颗心态 ❤️ · 电诈团伙移速+28% · 专为群内竞速冲榜打造',
-        maxHp: 3,
-        scamSpeedMult: 1.28,
-        scamLossMult: 1.3,
-        spawnRateMult: 1.25
+      endless: {
+        id: 'endless',
+        name: '无尽模式',
+        tag: '生存冲榜',
+        desc: '无金额上限自由搞钱！四大电诈 Boss 轮番狂暴降临，装备无限进阶，挑战全群最高存款纪录！',
+        maxHp: 5,
+        scamSpeedMult: 1.08,
+        scamLossMult: 1.1,
+        spawnRateMult: 1.12
       }
     },
 
     PLAYER_BASE: {
       radius: 18,
-      speed: 245,
-      pickupRadius: 42,
-      dashSpeed: 640,
-      dashDuration: 0.21,
-      dashCooldown: 2.1,
-      skillRadius: 185,
-      skillCooldown: 7.5,
-      reportBounty: 30,
+      speed: 265,
+      pickupRadius: 46,
+      dashSpeed: 680,
+      dashDuration: 0.22,
+      dashCooldown: 1.9,
+      skillRadius: 195,
+      skillCooldown: 7.0,
+      reportBounty: 18,
       invulnDuration: 1.15
     },
 
+    // Smaller, grounded Stage 1 base values (scaled up dynamically in Stage 2 & Endless!)
     ITEMS: {
-      bottle: { id: 'bottle', name: '塑料瓶', value: 8, radius: 13, color: '#38BDF8', weight: 48 },
-      cardboard: { id: 'cardboard', name: '废纸箱', value: 15, radius: 15, color: '#D97706', weight: 32 },
-      cash_small: { id: 'cash_small', name: '日结零钱', value: 22, radius: 15, color: '#10B981', weight: 15 },
-      maotai_bottle: { id: 'maotai_bottle', name: '空茅台瓶', value: 38, radius: 16, color: '#F59E0B', weight: 5 }
+      bottle: { id: 'bottle', name: '塑料水瓶', value: 3, radius: 13 },
+      can: { id: 'can', name: '易拉罐', value: 5, radius: 13 },
+      cardboard: { id: 'cardboard', name: '废纸箱', value: 8, radius: 15 },
+      cash_small: { id: 'cash_small', name: '传单日结零钱', value: 14, radius: 15 },
+      maotai_bottle: { id: 'maotai_bottle', name: '飞天茅台空瓶', value: 30, radius: 16 }
     },
 
     UPGRADES: [
       {
         id: 'scooter',
         icon: '🛵',
-        title: '众筹二手小电驴',
+        title: '改装续航小电驴',
         sender: '热心群友·老张',
-        desc: 'Freddy 移动速度 +24%，且每次完成【跑腿外卖】额外多拿 ¥35 小费！'
+        desc: '移动速度 +25%，跑腿送外卖每单额外加收 +35% 准时小费！'
       },
       {
         id: 'magnet',
         icon: '🧲',
-        title: '群友祖传抢红包挂',
+        title: '强磁吸金抓钩',
         sender: '技术宅群友·阿凯',
-        desc: '拾取吸附范围扩大 +90%，路过街道自动把真钞票、塑料瓶和红包吸进兜里！'
+        desc: '自动拾取范围 +85%，且左键/Q【抓钩吸金】射程扩大并减冷却 25%！'
       },
       {
         id: 'app96110',
         icon: '🛡️',
         title: '国家反诈中心护盾',
         sender: '群管理员',
-        desc: '立即恢复 1 颗心态 ❤️，并生成每 16 秒自动充能的【防诈护盾】，抵挡一次骗局！'
+        desc: '立即恢复 1 颗❤️，并生成每 15 秒自动充能的【防诈护盾】，抵挡一次骗局伤害！'
       },
       {
         id: 'megaphone',
         icon: '📢',
-        title: '96110 扩音大喇叭',
+        title: '96110 高音大喇叭',
         sender: '暴躁老哥群友',
-        desc: '【一键举报 (E)】范围扩大 +45%、冷却缩减 30%，震退骗子的反诈奖金提升至 ¥50！'
+        desc: '右键/E【一键举报】范围扩大 +45%、冷却缩减 28%，封禁骗子赏金翻倍且对 Boss 增伤 50%！'
       },
       {
         id: 'milktea',
         icon: '🧋',
-        title: '拼好饭冰镇柠檬水',
+        title: '冰镇吨吨桶柠檬茶',
         sender: '富婆群友',
-        desc: '立即恢复 2 颗心态 ❤️（满血则上限+1），冲刺冷却缩减 28% 且冲刺途中强力吸金！'
+        desc: '立即恢复 2 颗❤️（满血则上限+1），冲刺冷却缩减 28% 且滑铲途中强力吸金！'
       },
       {
         id: 'hustle',
         icon: '💼',
-        title: '正经副业打工魂',
+        title: '金牌打工人执照',
         sender: '考公上岸群友',
-        desc: '脚踏实地搞钱！捡废品、摇奶茶兼职、抢群红包的所有正经收入永久 +30%！'
+        desc: '捡废品、外卖跑腿、蹲兼职圈与群红包的所有正经收入永久提升 +32%！'
       },
       {
         id: 'eagle_eye',
         icon: '👀',
         title: '人间清醒火眼金睛',
-        sender: '吃瓜课代表',
-        desc: '所有伪装假红包与陷阱均标注醒目【骗局】警示，且【一键举报】可将假红包净化为 ¥45 真钱！'
+        sender: '反诈课代表',
+        desc: '假红包与陷阱高亮警示，且右键/E【一键举报】可将陷阱直接转化为高额真钞！'
       },
       {
         id: 'rich_aura',
         icon: '✨',
-        title: '夺回 Rich 之名',
+        title: '夺回 Rich 光环',
         sender: '全群打Call团',
-        desc: '拒绝再当 Fried！每连续 10 秒未被骗自动获群友打赏 +¥28，且移速额外 +10%！'
+        desc: '每连续 10 秒未被骗自动获群友打赏津贴，且基础移速额外 +10%！'
+      },
+      {
+        id: 'vip_box',
+        icon: '📦',
+        title: '恒温黑金外卖箱',
+        sender: '单王骑手群友',
+        desc: '外卖配送时限延长 +6 秒，配送期间移速额外 +15%，送达收益再 +25%！'
+      },
+      {
+        id: 'emp_overload',
+        icon: '⚡',
+        title: '专案组脉冲增幅器',
+        sender: '网安热心群友',
+        desc: '左键/Q 抓钩可直接震晕面前小骗子，且拾取 ⚡96110电磁炮 对 Boss 伤害与追缴金额提升 +40%！'
       }
     ],
 
-    INTRO_MESSAGES: [
-      { sender: 'FriedRich (Freddy)', role: '大冤种本人', self: true, text: '兄弟们天塌了……刚在兼职链接做刷单任务垫付了 ¥1200，客服说卡单了要再转 5000 才能提现，我是不是凉了 😭' },
-      { sender: '熬夜冠军·阿哲', role: '群友', text: '？？？哥们你名字叫 FriedRich，结果 Rich 没当上，直接被骗子给 Fried（炸糊）了是吧？！' },
-      { sender: '反诈课代表', role: '管理员', text: '千万别再转钱！100%是连环刷单杀猪盘！立刻止损拉黑！' },
-      { sender: '热心富哥·老王', role: '群主', text: '别光顾着笑 Freddy 了（虽然确实好笑），大家搭把手，带他去街区跑外卖、捡瓶子、发点群红包，帮他把这 1200 凑回来！' }
-    ],
+    TWIST_STORY: {
+      badge: '⚠️ 第一阶段达成 ¥1,200 · 突发剧情转折！',
+      title: '“再刷完这最后一联单，连本带利全提现！”',
+      lines: [
+        { speaker: '📱 金牌清退客服', text: '“恭喜亲凑齐 ¥1,200 激活金！系统已为您开启【VIP 三联大单通道】，现在把这 1200 连同花呗额度一起垫进去，3 分钟立返 ¥18,888 哦！”', type: 'scam' },
+        { speaker: '💬 群友集体嘶吼', text: '“Freddy 住手啊！！那可是你刚捡瓶子跑断腿攒回来的 1200！！千万别转！！”', type: 'friends' },
+        { speaker: '🤡 FriedRich (Freddy)', text: '“万一……万一做完这单真能把之前的全提出来呢？我冲最后一把！！【确认转账】”', type: 'freddy' },
+        { speaker: '🚨 银行扣款暴雷', text: '【交易提醒】您尾号 8848 账户连环垫付被卷款拉黑，刚攒的 ¥1,200 清零，并额外被骗 ¥12,000！！（真·油炸全熟 Deep-Fried Rich）', type: 'alert' }
+      ],
+      awakenText: '痛失 ¥12,000 后 Freddy 终于彻底醒悟！卸载全部刷单软件，心态上限 +1❤️ 并回满状态！全城【CBD 高薪跑腿】【大额兼职】与【三大电诈头目追缴悬赏】现已全面开启——脚踏实地把 ¥12,000 全部挣回来！'
+    },
 
     CHAT_LINES: {
-      start: [
-        { user: '群主·老王', msg: '加油啊 Freddy！脚踏实地挣回 1200，别再点陌生刷单链接了！' },
-        { user: '摸鱼仙人', msg: '看到发光外卖餐箱记得去接单，一单能回血百来块呢！' }
+      startStage1: [
+        { user: '群主·老王', msg: 'Freddy 先在四大街区跑跑腿捡捡瓶子，把被骗的 1200 块凑回来，别再看刷单群了！' },
+        { user: '摸鱼仙人', msg: '按 Tab 可以放大右下角雷达，四个街区都有高价外卖店和兼职圈！' }
+      ],
+      startStage2: [
+        { user: '反诈课代表', msg: '1200 变 12000……我血压上来了！幸好 Freddy 这次彻底醒了，去东南区 CBD 接高薪大单吧！' },
+        { user: '暴躁群友', msg: '别灰心！端掉那几个电诈大头目能直接追缴上千块赃款，全群陪你干到底！' }
+      ],
+      startEndless: [
+        { user: '群主·老王', msg: '【无尽搞钱挑战开启】看看今天谁能帮 FriedRich 创下全群最高存款纪录！' }
       ],
       bottleStreak: [
-        { user: '夜跑群友', msg: '卧槽 Freddy 这手速，整条街的塑料瓶都被你薅秃了 😂' },
-        { user: '环保卫士', msg: '虽然一个瓶子8块有点魔幻，但为了帮 FriedRich 回本我认了！' },
-        { user: '吃瓜群友', msg: '捡瓶子虽慢但稳啊，总比垫付返利靠谱一万倍！' }
+        { user: '夜跑群友', msg: '好家伙 Freddy 这连收手速，四个街区的瓶子纸箱都被你承包了 😂' },
+        { user: '环保卫士', msg: '积少成多！每一分汗水钱都比骗子的画饼实在！' }
       ],
       deliveryPick: [
-        { user: '黄袍加身群友', msg: 'Freddy 接单了！跟着脚下绿色箭头冲，别超时拿满小费！' },
-        { user: '点外卖的群友', msg: '慢点骑但快点跑，我的猪脚饭就拜托 FriedRich 配送了！' }
+        { user: '单王群友', msg: '接单成功！看准脚下绿色箭头和右下雷达路线，跨区闪送小费超丰厚！' }
       ],
       deliveryDone: [
-        { user: '五星好评顾客', msg: '配送神速！打赏已到账，Freddy 离变回 Rich 又近了一大步！' },
-        { user: '记账群友', msg: '好家伙，这单跑腿顶得上捡十几个瓶子，汗水不会骗人！' }
+        { user: '五星好评顾客', msg: '配送神速！打赏已到账，Freddy 离翻盘又近了一大步！' }
       ],
       parttimeDone: [
-        { user: '奶茶店长', msg: '日结工资现结现发！正经兼职从不要你先垫钱！' },
-        { user: '群友小陈', msg: '看到 Freddy 认真端盘子摇奶茶的样子，眼角流下了欣慰的泪水' }
+        { user: '兼职店长', msg: '日结工资现结现发！记住：正经工作永远是老板给你发钱！' }
       ],
       redPacketRain: [
-        { user: '富哥群友', msg: '【群红包雨】发了一波拼手气红包助 Freddy 回血！注意混进来的紫色假返利包别乱点！' },
-        { user: '潜水大佬', msg: '出来冒个泡，撒一波红包雨！Freddy 看准真红包再抢啊！' }
+        { user: '富哥群友', msg: '🧧 群里下一波红包雨给 Freddy 回血！小心紫色长角的假返利包！' }
       ],
       scammed: [
-        { user: '反诈课代表', msg: '痛心疾首！！Freddy 你怎么又信了“做完这单立返”啊！快把掉地上的钱捡回来！' },
-        { user: '毒舌群友', msg: '完了完了，刚攒点钱又被炸了，真·Fried（全熟）Rich 啊！' },
-        { user: '急疯了的群主', msg: '按空格冲刺躲开啊哥们！看到紫色诈骗弹窗离远点！' }
+        { user: '毒舌群友', msg: '哎呀 Freddy 怎么又挨骗子一下！快把掉地上的钱捡回来！' },
+        { user: '急疯了的群主', msg: '按 Space 滑铲有无敌帧！左键/Q 也能直接拍碎飞过来的弹幕！' }
       ],
       baited: [
-        { user: '吃瓜课代表', msg: '哎呀！那个写着“垫付双倍返”的紫包一眼假啊 Freddy！！' },
-        { user: '群友老李', msg: '贪小便宜吃大亏！下次按 E 一键举报直接端掉它！' }
+        { user: '吃瓜课代表', msg: '写着“高倍返利”的紫包千万别踩！用右键/E 一键举报能把它净化成真钱！' }
       ],
       reportHit: [
-        { user: '96110接线员', msg: '举报核实有效！成功拦截电诈分子，发放反诈奖金！' },
-        { user: '暴躁群友', msg: '漂亮！！反手就是一个举报拉黑，Freddy 终于支棱起来了！' }
+        { user: '96110专线', msg: '举报核实有效！成功封停电诈账号，发放反诈奖金！' }
       ],
       shieldBlock: [
-        { user: '国家反诈APP', msg: '【预警拦截成功】已为 FriedRich 自动阻断一次刷单诈骗攻击！' }
+        { user: '国家反诈APP', msg: '🛡️【预警拦截】已自动为 FriedRich 阻断一次诈骗攻击！' }
       ],
       bossSpawn: [
-        { user: '全群拉响警报', msg: '⚠️ 卧槽！眼看 Freddy 快凑齐 1000+ 了，【境外刷单总庄家】急眼亲自下场了！！' },
-        { user: '战术指导群友', msg: '别慌！捡地上的蓝色【96110电磁脉冲】或者继续跑单凑满 1200 就能直接正义执行他！' }
+        { user: '全群拉响警报', msg: '🚨 电诈团伙大头目现身了！拾取场上的 ⚡96110电磁炮 或按 E 狠狠制裁他追回巨款！' }
+      ],
+      bossDefeated: [
+        { user: '专案组通报', msg: '🎉 成功捣毁电诈头目窝点！追缴大额被骗资金散落满地，快吸过来！' }
       ],
       nearWin: [
-        { user: '全群屏息凝神', msg: '只差最后一点就满 ¥1200 了！！Freddy 稳住千万别浪！！' }
+        { user: '全群屏息凝神', msg: '只差最后一点就彻底凑齐上岸了！！Freddy 稳住别浪！！' }
       ],
       win: [
-        { user: '全群刷屏庆祝', msg: '🎉 1200 凑齐啦！！恭喜 FriedRich 彻底告别 Fried，重夺 Rich 之名！！' }
+        { user: '全群刷屏欢呼', msg: '🏆 ¥12,000 全部赚回来了！！恭喜 FriedRich 彻底涅槃，真真正正变回 Rich！！' }
       ]
     },
 
     ANTI_SCAM_TIPS: [
-      '凡是宣称“足不出户、动动手指、先垫付后返佣”的网络刷单，100% 是诈骗！',
-      '遇到“操作失误、卡单、联单、信誉分不足、账户冻结需交解冻金”话术，立即止损报警！',
-      '前期给你几块钱小额返利只是鱼饵，等你投入上千上万就会立刻拉黑卷款！',
-      '正经兼职都是干完活发工资，绝不会让你先往陌生账户充值垫付一分钱！',
-      '下载国家反诈中心 APP，牢记全国反诈劝阻专线 96110，守护好自己的钱袋子！'
+      '被骗后切勿相信“再补一单/交解冻金即可全额提现”，那是从 1200 变成 12000 的连环深渊！',
+      '凡是宣称“足不出户、先垫付后返佣”的网络兼职刷单，100% 是诈骗！',
+      '遇到自称客服发来屏幕共享、索要验证码或诱导网贷垫付，立即挂断并拨打 96110！',
+      '前期几十块小额返利只是诱饵，及时止损报警才是唯一正确选择！'
     ]
   };
 
