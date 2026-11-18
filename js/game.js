@@ -132,6 +132,10 @@
       return m;
     }
 
+    isHealUnlocked() {
+      return (this.selectedMode.id === 'story' && this.stage >= 2) || this.selectedMode.id === 'endless';
+    }
+
     setState(newState) {
       this.state = newState;
       const useCustomCursor = newState === 'playing' && !this.isTouchMode;
@@ -286,7 +290,7 @@
             this.triggerGrabSkill();
           } else if (e.code === 'KeyE' || e.code === 'KeyJ') {
             this.triggerReportSkill();
-          } else if ((e.code === 'KeyF' || e.code === 'KeyH') && !e.repeat) {
+          } else if ((e.code === 'KeyF' || e.code === 'KeyH' || e.key === 'f' || e.key === 'F') && !e.repeat) {
             this.triggerBuyHeal();
           }
         }
@@ -371,27 +375,28 @@
         if (e.pointerId === this.joyPointerId) this.resetJoystick();
       });
 
-      // Hotbar buttons
-      document.getElementById('btn-dash').addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (this.state === 'playing') this.triggerDash();
-      });
-      document.getElementById('btn-grab').addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (this.state === 'playing') this.triggerGrabSkill();
-      });
-      document.getElementById('btn-skill').addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (this.state === 'playing') this.triggerReportSkill();
-      });
-      document.getElementById('btn-heal').addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (this.state === 'playing') this.triggerBuyHeal();
-      });
+      // Hotbar buttons (dual pointerdown + click binding with debounce for 100% cross-browser/touch reliability)
+      const bindHotbarBtn = (id, fn) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        let lastFireMs = -1000;
+        const handler = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const now = performance.now();
+          if (now - lastFireMs < 240) return;
+          lastFireMs = now;
+          audio.init();
+          if (this.state === 'playing') fn();
+        };
+        el.addEventListener('pointerdown', handler);
+        el.addEventListener('click', handler);
+      };
+
+      bindHotbarBtn('btn-heal', () => this.triggerBuyHeal());
+      bindHotbarBtn('btn-dash', () => this.triggerDash());
+      bindHotbarBtn('btn-grab', () => this.triggerGrabSkill());
+      bindHotbarBtn('btn-skill', () => this.triggerReportSkill());
     }
 
     syncMouseWorld() {
@@ -496,6 +501,7 @@
 
       this.setState('playing');
       this.lastFrameTs = performance.now();
+      this.refreshHUDState();
       audio.startBgm(false);
 
       if (this.selectedMode.id === 'endless') {
@@ -558,6 +564,7 @@
 
         this.setState('playing');
         this.lastFrameTs = performance.now();
+        this.refreshHUDState();
       });
     }
 
@@ -759,21 +766,26 @@
 
     triggerBuyHeal() {
       if (!this.player || this.state !== 'playing') return;
-      if (this.lastHealTime && this.time - this.lastHealTime < 0.45) return;
+      if (!this.isHealUnlocked()) return;
+      if (this.time - this.lastHealTime < 0.35) return;
 
-      const cost = CONFIG.HEAL_COST;
+      const cost = CONFIG.HEAL_COST || 1200;
       if (this.player.hp >= this.player.maxHp) {
-        this.addFloatingText(this.player.x, this.player.y - 38, '❤️ 心态已满，无需购买！', '#93C5FD', 14);
+        audio.deny();
+        this.ui.shakeHealButton();
+        this.addFloatingText(this.player.x, this.player.y - 38, '❤️ 当前心态已满，无需回血！', '#93C5FD', 15);
         return;
       }
 
       if (this.money < cost) {
+        audio.deny();
+        this.ui.shakeHealButton();
         this.addFloatingText(
           this.player.x,
           this.player.y - 38,
-          `💸 差 ¥${Math.ceil(cost - this.money)} 才够 ¥${cost} 买回血！`,
+          `💸 存款不足 ¥${cost}（还差 ¥${Math.ceil(cost - this.money)}）`,
           '#FDA4AF',
-          14
+          15
         );
         return;
       }
@@ -785,24 +797,24 @@
       this.player.invulnTime = Math.max(this.player.invulnTime, 0.9);
       this.player.setMood('cool', 1.1);
 
-      audio.upgradePick();
-      this.ui.flashScreen('rgba(16, 185, 129, 0.28)');
+      audio.healSuccess();
+      this.ui.flashScreen('rgba(16, 185, 129, 0.32)');
       this.shockwaves.push({
         x: this.player.x,
         y: this.player.y,
         r: 14,
-        maxR: 115,
+        maxR: 118,
         color: '#34D399',
-        life: 0.32,
-        maxLife: 0.32
+        life: 0.34,
+        maxLife: 0.34
       });
-      this.spawnBurst(this.player.x, this.player.y, '#4ADE80', 18);
+      this.spawnBurst(this.player.x, this.player.y, '#4ADE80', 20);
       this.addFloatingText(
         this.player.x,
         this.player.y - 44,
-        `❤️‍🩹 消费 ¥${cost} 回血 +1❤️！`,
+        `❤️‍🩹 消费 ¥${cost} 恢复 1颗❤️！`,
         '#4ADE80',
-        17
+        18
       );
       this.ui.pushChat('healBought');
       this.refreshHUDState();

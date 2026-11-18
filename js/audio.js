@@ -115,6 +115,18 @@
       this.tone(1120, 0.16, 'sine', 0.12, 0.06);
     }
 
+    deny() {
+      this.tone(220, 0.07, 'square', 0.07, 0);
+      this.tone(175, 0.09, 'square', 0.07, 0.075);
+    }
+
+    healSuccess() {
+      this.tone(523.25, 0.1, 'sine', 0.13, 0);
+      this.tone(659.25, 0.1, 'sine', 0.13, 0.07);
+      this.tone(783.99, 0.12, 'triangle', 0.14, 0.14);
+      this.tone(1046.5, 0.22, 'triangle', 0.15, 0.21);
+    }
+
     upgradePick() {
       const notes = [523.25, 659.25, 783.99, 987.77, 1318.5];
       notes.forEach((n, i) => this.tone(n, 0.13, 'triangle', 0.11, i * 0.045));

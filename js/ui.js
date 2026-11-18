@@ -247,6 +247,13 @@
       }, 200);
     }
 
+    shakeHealButton() {
+      if (!this.btnHeal) return;
+      this.btnHeal.classList.remove('deny-shake');
+      void this.btnHeal.offsetWidth;
+      this.btnHeal.classList.add('deny-shake');
+    }
+
     updateSlotCd(overlayEl, textEl, cd, maxCd) {
       if (cd > 0.04) {
         const pct = Math.min(100, (cd / maxCd) * 100);
@@ -327,15 +334,21 @@
       this.updateSlotCd(this.skillCdOverlay, this.skillCdText, player.skillCd, player.skillMaxCd);
 
       if (this.btnHeal) {
-        const isFullHp = player.hp >= player.maxHp;
-        const canBuy = roundedMoney >= CONFIG.HEAL_COST && !isFullHp;
-        this.btnHeal.classList.toggle('can-buy', canBuy);
-        this.btnHeal.classList.toggle('cant-buy', !canBuy);
-        if (this.healPriceTag) {
-          this.healPriceTag.textContent = `¥${CONFIG.HEAL_COST}`;
-        }
-        if (this.healSlotLabel) {
-          this.healSlotLabel.textContent = isFullHp ? '已满血' : canBuy ? '回血+1' : '买回血';
+        const healUnlocked = (modeId === 'story' && stage >= 2) || modeId === 'endless';
+        this.btnHeal.classList.toggle('hidden', !healUnlocked);
+
+        if (healUnlocked) {
+          const healCost = CONFIG.HEAL_COST || 1200;
+          const isFullHp = player.hp >= player.maxHp;
+          const canBuy = roundedMoney >= healCost && !isFullHp;
+          this.btnHeal.classList.toggle('can-buy', canBuy);
+          this.btnHeal.classList.toggle('cant-buy', !canBuy);
+          if (this.healPriceTag) {
+            this.healPriceTag.textContent = `¥${healCost}`;
+          }
+          if (this.healSlotLabel) {
+            this.healSlotLabel.textContent = isFullHp ? '已满血' : canBuy ? '回血+1' : '买回血';
+          }
         }
       }
 

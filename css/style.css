@@ -308,16 +308,21 @@ body.is-touch-device .touch-only {
   color: #FECDD3;
 }
 
-/* ==================== LIVE CHAT FEED ==================== */
+/* ==================== LIVE CHAT FEED (FLOWS SAFELY BELOW QUEST BANNER) ==================== */
+.hud-sub-row {
+  max-width: 1440px;
+  margin: 8px auto 0;
+  display: flex;
+  justify-content: flex-start;
+  pointer-events: none;
+}
+
 .chat-feed {
-  position: fixed;
-  top: 116px;
-  left: 20px;
+  position: relative;
   width: 285px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 11;
   pointer-events: none;
 }
 
@@ -391,7 +396,19 @@ body.is-touch-device .touch-only {
   justify-content: center;
   cursor: pointer;
   overflow: hidden;
+  touch-action: manipulation;
   transition: transform 0.1s;
+}
+
+.hotbar-slot.deny-shake {
+  animation: denyShake 0.28s ease-in-out;
+}
+
+@keyframes denyShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  50% { transform: translateX(5px); }
+  75% { transform: translateX(-3px); }
 }
 
 .hotbar-slot:hover { transform: translateY(-2px); }
@@ -459,8 +476,8 @@ body.is-touch-device .touch-only {
   pointer-events: none;
 }
 
-.slot-icon { font-size: 21px; z-index: 1; }
-.slot-label { font-size: 11px; font-weight: 800; margin-top: 2px; z-index: 1; }
+.slot-icon { font-size: 21px; z-index: 1; pointer-events: none; }
+.slot-label { font-size: 11px; font-weight: 800; margin-top: 2px; z-index: 1; pointer-events: none; }
 .slot-key {
   font-size: 10px;
   padding: 1px 6px;
@@ -470,6 +487,7 @@ body.is-touch-device .touch-only {
   color: #93C5FD;
   margin-top: 3px;
   z-index: 1;
+  pointer-events: none;
 }
 
 .minimap-panel {
@@ -1214,13 +1232,14 @@ kbd {
     text-overflow: ellipsis;
   }
 
-  /* Compact single sheer chat pill */
+  /* Compact single sheer chat pill — positioned in normal flow right below quest-banner! */
+  .hud-sub-row {
+    margin: 5px 0 0;
+  }
+
   .chat-feed {
-    top: 64px;
-    left: 8px;
-    right: auto;
     width: auto;
-    max-width: 205px;
+    max-width: 210px;
     gap: 4px;
   }
 
@@ -1247,10 +1266,10 @@ kbd {
     overflow: hidden;
   }
 
-  /* Toggleable floating mini radar at top-right when 🗺️ is tapped */
+  /* Toggleable floating mini radar at top-right below quest-banner when 🗺️ is tapped */
   .minimap-panel {
     display: none;
-    top: 64px;
+    top: 74px;
     right: 8px;
     bottom: auto;
     padding: 4px;

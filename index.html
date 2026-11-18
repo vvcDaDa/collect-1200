@@ -6,7 +6,7 @@
   <meta name="description" content="帮被网络刷单骗局骗走血汗钱的QQ群友 FriedRich (Freddy) 在四大街区打工、跑腿、举报电诈团伙，体验从被骗1200到追回12000的完整剧情与无尽挑战！" />
   <title>拯救 FriedRich | 2.5D 城市反诈打工小游戏</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-  <link rel="stylesheet" href="./css/style.css" />
+  <link rel="stylesheet" href="./css/style.css?v=5" />
 </head>
 <body>
   <div id="app">
@@ -66,12 +66,14 @@
       <div id="quest-banner" class="quest-banner">
         💡 穿梭四大街区捡废品、接外卖跑腿或踩绿色兼职圈，帮 Freddy 凑齐目标金额！
       </div>
+
+      <!-- Live QQ Group Chat Feed (placed in normal vertical flow below quest-banner so it can NEVER be covered!) -->
+      <div class="hud-sub-row">
+        <aside id="chat-feed" class="chat-feed hidden" aria-live="polite"></aside>
+      </div>
     </header>
 
-    <!-- Live QQ Group Chat Feed -->
-    <aside id="chat-feed" class="chat-feed hidden" aria-live="polite"></aside>
-
-    <!-- Bottom Tactical Layer: Touch Joystick (Touch Only) + PC 3-Skill Hotbar + Live City Radar -->
+    <!-- Bottom Tactical Layer: Touch Joystick (Touch Only) + PC Skill Hotbar + Live City Radar -->
     <div id="controls-layer" class="controls-layer hidden">
       <div id="joystick-zone" class="joystick-zone touch-only">
         <div id="joystick-base" class="joystick-base">
@@ -80,6 +82,13 @@
       </div>
 
       <div class="pc-hotbar">
+        <button id="btn-heal" class="hotbar-slot slot-heal cant-buy hidden" type="button" title="花费 ¥1,200 购买回血道具，立即恢复 1 颗❤️心态并解除减速 (F)">
+          <span class="heal-price-tag" id="heal-price-tag">¥1200</span>
+          <span class="slot-icon">❤️‍🩹</span>
+          <span class="slot-label" id="heal-slot-label">买回血</span>
+          <kbd class="slot-key">F</kbd>
+        </button>
+
         <button id="btn-dash" class="hotbar-slot slot-dash" type="button" title="向移动或鼠标准星方向无敌滑铲 (Space / Shift)">
           <span class="slot-cd-fill" id="dash-cd-overlay"></span>
           <span class="slot-cd-num hidden" id="dash-cd-text"></span>
@@ -102,13 +111,6 @@
           <span class="slot-icon">📢</span>
           <span class="slot-label">一键举报</span>
           <kbd class="slot-key">右键 / E</kbd>
-        </button>
-
-        <button id="btn-heal" class="hotbar-slot slot-heal cant-buy" type="button" title="花费 ¥1,200 购买回血道具，立即恢复 1 颗❤️心态并解除减速 (F)">
-          <span class="heal-price-tag" id="heal-price-tag">¥1200</span>
-          <span class="slot-icon">❤️‍🩹</span>
-          <span class="slot-label" id="heal-slot-label">买回血</span>
-          <kbd class="slot-key">F</kbd>
         </button>
       </div>
 
@@ -278,12 +280,12 @@
     <div id="toast" class="toast hidden">✅ 战报已复制！快去粘贴发到 QQ 群里吧！</div>
   </div>
 
-  <script src="./js/config.js"></script>
-  <script src="./js/audio.js"></script>
-  <script src="./js/graphics.js"></script>
-  <script src="./js/world.js"></script>
-  <script src="./js/entities.js"></script>
-  <script src="./js/ui.js"></script>
-  <script src="./js/game.js"></script>
+  <script src="./js/config.js?v=5"></script>
+  <script src="./js/audio.js?v=5"></script>
+  <script src="./js/graphics.js?v=5"></script>
+  <script src="./js/world.js?v=5"></script>
+  <script src="./js/entities.js?v=5"></script>
+  <script src="./js/ui.js?v=5"></script>
+  <script src="./js/game.js?v=5"></script>
 </body>
 </html>
