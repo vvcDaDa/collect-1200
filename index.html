@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="description" content="帮被网络刷单骗走1200元的QQ群友 FriedRich (Freddy) 打工、跑腿、捡瓶子、抢群红包、举报电诈分子，重新凑齐 ¥1200！" />
+  <title>拯救 FriedRich：帮群友凑齐 ¥1200 | 2.5D 街区反诈打工大作战</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Main 2D/2.5D Game Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Damage / Heal / Win Screen Flash Vignette -->
+    <div id="screen-flash" class="screen-flash"></div>
+
+    <!-- In-Game HUD -->
+    <header id="hud" class="hud hidden">
+      <div class="hud-top">
+        <!-- Hero Status Card -->
+        <div class="hero-card">
+          <div class="hero-avatar" id="hud-avatar">
+            <span id="hud-avatar-face">😅</span>
+          </div>
+          <div class="hero-info">
+            <div class="hero-name-row">
+              <span class="hero-name">FriedRich <small>(Freddy)</small></span>
+              <span class="hero-status-tag" id="hero-rank-tag">痛失1200·回血中</span>
+            </div>
+            <div class="hearts-row" id="hud-hearts" aria-label="心态值"></div>
+            <div class="buffs-row" id="hud-buffs"></div>
+          </div>
+        </div>
+
+        <!-- Central Target ¥1200 Progress -->
+        <div class="money-panel">
+          <div class="money-header">
+            <div class="money-title-group">
+              <span class="money-label">🎯 回血目标</span>
+              <span id="combo-badge" class="combo-badge hidden">连收 x2</span>
+            </div>
+            <span class="money-numbers">
+              <strong id="money-current">¥0</strong>
+              <span class="money-sep">/</span>
+              <span class="money-target">¥1,200</span>
+            </span>
+            <span class="timer-badge" id="hud-timer">00:00</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="money-bar-fill" style="width: 0%"></div>
+            <div class="milestone-dot" style="left: 20.8%" title="¥250 群友支援"><span>¥250</span></div>
+            <div class="milestone-dot" style="left: 45.8%" title="¥550 群友支援"><span>¥550</span></div>
+            <div class="milestone-dot" style="left: 70.8%" title="¥850 群友支援"><span>¥850</span></div>
+            <div class="milestone-dot boss-dot" style="left: 83.3%" title="¥1000 庄家阻击"><span>BOSS</span></div>
+          </div>
+        </div>
+
+        <!-- Utility Controls -->
+        <div class="hud-controls">
+          <button id="btn-mute" class="icon-btn" title="音效开关 (M)" aria-label="音效开关">🔊</button>
+          <button id="btn-pause" class="icon-btn" title="暂停菜单 (ESC / P)" aria-label="暂停">⏸️</button>
+        </div>
+      </div>
+
+      <!-- Active Mission / Event Banner -->
+      <div id="quest-banner" class="quest-banner">
+        💡 穿梭街区捡废品、去商户接【外卖跑腿】或踩【兼职圈】，帮 Freddy 凑齐 ¥1200！
+      </div>
+    </header>
+
+    <!-- Live QQ Group Chat Feed -->
+    <aside id="chat-feed" class="chat-feed hidden" aria-live="polite"></aside>
+
+    <!-- Bottom Tactical Layer: Touch Joystick (Hidden on PC!) + PC Center Skill Hotbar + Live Minimap -->
+    <div id="controls-layer" class="controls-layer hidden">
+      <!-- Auto-shown ONLY when touch screen is used -->
+      <div id="joystick-zone" class="joystick-zone touch-only">
+        <div id="joystick-base" class="joystick-base">
+          <div id="joystick-knob" class="joystick-knob"></div>
+        </div>
+      </div>
+
+      <!-- PC / Universal Tactical 3-Skill Hotbar (Centered on PC) -->
+      <div class="pc-hotbar">
+        <button id="btn-dash" class="hotbar-slot slot-dash" type="button" title="向移动或准星方向无敌滑铲 (Space / Shift)">
+          <span class="slot-cd-fill" id="dash-cd-overlay"></span>
+          <span class="slot-cd-num hidden" id="dash-cd-text"></span>
+          <span class="slot-icon">💨</span>
+          <span class="slot-label">滑铲闪避</span>
+          <kbd class="slot-key">Space</kbd>
+        </button>
+
+        <button id="btn-grab" class="hotbar-slot slot-grab" type="button" title="朝鼠标准星发射吸金波：强吸钞票废品并拍碎弹幕 (鼠标左键 / Q)">
+          <span class="slot-cd-fill" id="grab-cd-overlay"></span>
+          <span class="slot-cd-num hidden" id="grab-cd-text"></span>
+          <span class="slot-icon">🧲</span>
+          <span class="slot-label">抓钩吸金</span>
+          <kbd class="slot-key">左键 / Q</kbd>
+        </button>
+
+        <button id="btn-skill" class="hotbar-slot slot-report" type="button" title="释放反诈脉冲：封禁骗子领赏、净化假红包 (鼠标右键 / E)">
+          <span class="slot-cd-fill" id="skill-cd-overlay"></span>
+          <span class="slot-cd-num hidden" id="skill-cd-text"></span>
+          <span class="slot-icon">📢</span>
+          <span class="slot-label">一键举报</span>
+          <kbd class="slot-key">右键 / E</kbd>
+        </button>
+      </div>
+
+      <!-- PC Live Neighborhood Minimap Radar -->
+      <div id="minimap-panel" class="minimap-panel" title="点击或按 Tab 切换雷达大小">
+        <div class="minimap-header">
+          <span>🗺️ 街区实时雷达</span>
+          <kbd>Tab</kbd>
+        </div>
+        <canvas id="minimap-canvas" width="220" height="165"></canvas>
+      </div>
+    </div>
+
+    <!-- WIDESCREEN PC START SCREEN (Live 2.5D City Background + Dual-Column Dashboard) -->
+    <section id="start-screen" class="overlay-screen start-backdrop">
+      <div class="start-dashboard">
+        <!-- Top Window Titlebar -->
+        <div class="qq-window-bar">
+          <div class="qq-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="qq-group-title">💬 相亲相爱群友群 · 拯救大冤种行动指挥部 (99+)</div>
+          <button id="btn-start-mute" class="mini-mute-btn" type="button">🔊 音效开启</button>
+        </div>
+
+        <div class="dashboard-columns">
+          <!-- Left Column: QQ Group Backstory & Record -->
+          <div class="col-chat">
+            <div class="chat-panel-header">
+              <span class="live-dot"></span>
+              <span>案发群聊回放 · 主人公：<strong>FriedRich (Freddy)</strong></span>
+            </div>
+            <div class="qq-chat-box" id="intro-chat-box"></div>
+            <div id="best-record-text" class="best-record">
+              🏆 本机最佳纪录：暂无通关记录，快来帮 Freddy 首通！
+            </div>
+          </div>
+
+          <!-- Right Column: Game Title, Codex, PC Controls & Start -->
+          <div class="col-main">
+            <div class="title-banner">
+              <div class="badge-pill">真实群友事件改编 · 2.5D 街区动作收集网页游戏</div>
+              <h1>帮 <span class="highlight-hero">FriedRich (Freddy)</span> 凑齐 ¥1200</h1>
+              <p class="subtitle">ID 叫 FriedRich，结果 Rich 没当上直接被刷单骗子 Fried（炸糊）痛失 1200！快带他打工上岸！</p>
+            </div>
+
+            <!-- Visual Gameplay Guide -->
+            <div class="guide-grid">
+              <div class="guide-item good">
+                <strong>💰 四大正经回血路子</strong>
+                <p>沿街收 <b>塑料瓶/茅台瓶/纸箱</b> · 商户窗口接 <b>外卖跑腿</b> · 站入绿色 <b>兼职圈</b> · 抢群友 <b>真红包</b></p>
+              </div>
+              <div class="guide-item bad">
+                <strong>🚨 反击电诈连环套路</strong>
+                <p>鼠标左键/<b>Q</b> 朝准星强吸钞票并拍碎弹幕；鼠标右键/<b>E</b> 释放 <b>96110举报波</b> 封号领赏金、净化紫皮假红包！</p>
+              </div>
+            </div>
+
+            <!-- PC Controls Showcase Bar -->
+            <div class="pc-keybinds-box">
+              <div class="keybind-chip"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>八向移动</span></div>
+              <div class="keybind-chip"><kbd>鼠标左键</kbd> / <kbd>Q</kbd><span>准星抓钩吸金</span></div>
+              <div class="keybind-chip"><kbd>鼠标右键</kbd> / <kbd>E</kbd><span>96110举报脉冲</span></div>
+              <div class="keybind-chip"><kbd>Space</kbd><span>无敌滑铲</span></div>
+              <div class="keybind-chip"><kbd>Tab</kbd><span>缩放雷达</span></div>
+            </div>
+
+            <!-- Difficulty Selection -->
+            <div class="diff-selector">
+              <button type="button" class="diff-card active" data-diff="normal">
+                <div class="diff-top">
+                  <strong>🤝 群友互助模式</strong>
+                  <span class="diff-tag">推荐</span>
+                </div>
+                <p>5 颗心态 ❤️ · 支援充沛 · 沉浸体验打工回血之旅</p>
+              </button>
+              <button type="button" class="diff-card" data-diff="hard">
+                <div class="diff-top">
+                  <strong>🔥 地狱防诈速通</strong>
+                  <span class="diff-tag hard">挑战</span>
+                </div>
+                <p>3 颗心态 ❤️ · 电诈狂暴提速 · 专为群内竞速冲榜打造</p>
+              </button>
+            </div>
+
+            <button id="btn-start" class="primary-cta-btn" type="button">
+              🚀 立即出街！帮 FriedRich 赚回 ¥1,200 <small>[Enter]</small>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MILESTONE UPGRADE MODAL (Choose 1 of 3 QQ Group Support Buffs) -->
+    <section id="upgrade-modal" class="overlay-screen hidden">
+      <div class="modal-card upgrade-dialog">
+        <div class="upgrade-header">
+          <span class="qq-badge">💬 群消息空投外援！</span>
+          <h2 id="upgrade-modal-title">已攒够 ¥250！群友发来强力支援（三选一）</h2>
+          <p>点击卡片或直接按键盘数字键 <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> 立即装备</p>
+        </div>
+        <div id="upgrade-cards" class="upgrade-cards-grid"></div>
+      </div>
+    </section>
+
+    <!-- PAUSE MODAL -->
+    <section id="pause-modal" class="overlay-screen hidden">
+      <div class="modal-card small-dialog">
+        <h2>⏸️ 暂停喘口气</h2>
+        <p class="pause-sub">Freddy 正在路边歇脚，离凑齐 ¥1,200 越来越近了！</p>
+        <div class="modal-actions-col">
+          <button id="btn-resume" class="primary-cta-btn" type="button">▶️ 继续打工回血 [ESC]</button>
+          <button id="btn-restart-pause" class="secondary-btn" type="button">🔄 重新开始本局 [R]</button>
+          <button id="btn-home-pause" class="ghost-btn" type="button">🏠 返回群聊指挥部</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULT MODAL (Victory / Defeat + Shareable QQ Group Report) -->
+    <section id="result-modal" class="overlay-screen hidden">
+      <div class="modal-card result-dialog">
+        <div id="result-badge" class="result-badge">🎉 上岸成功</div>
+        <h2 id="result-title">恭喜 FriedRich 凑齐 ¥1,200！</h2>
+        <p id="result-subtitle" class="result-subtitle"></p>
+
+        <div class="honor-box">
+          <span class="honor-label">群内获封称号</span>
+          <strong id="result-honor" class="honor-title">【人间清醒反诈王】</strong>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-cell">
+            <span>最终金额</span>
+            <strong id="stat-money">¥1200</strong>
+          </div>
+          <div class="stat-cell">
+            <span>用时纪录</span>
+            <strong id="stat-time">02:15</strong>
+          </div>
+          <div class="stat-cell">
+            <span>捡废品/零钱</span>
+            <strong id="stat-recycle">¥0</strong>
+          </div>
+          <div class="stat-cell">
+            <span>外卖与兼职</span>
+            <strong id="stat-gig">¥0</strong>
+          </div>
+          <div class="stat-cell">
+            <span>群红包与打赏</span>
+            <strong id="stat-redpacket">¥0</strong>
+          </div>
+          <div class="stat-cell">
+            <span>举报骗子/被骗</span>
+            <strong id="stat-scam-ratio">0次 / 0次</strong>
+          </div>
+        </div>
+
+        <div class="antiscam-tip-box">
+          <strong>🛡️ 国家反诈防骗敲黑板：</strong>
+          <p id="result-tip"></p>
+        </div>
+
+        <div class="result-actions">
+          <button id="btn-copy-report" class="copy-report-btn" type="button">
+            📋 一键复制战报发到 QQ 群
+          </button>
+          <div class="result-sub-actions">
+            <button id="btn-retry" class="primary-cta-btn" type="button">🔄 再来一局 [R]</button>
+            <button id="btn-back-home" class="secondary-btn" type="button">🏠 返回首页</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Copy Toast Notification -->
+    <div id="toast" class="toast hidden">✅ 战报已复制！快去粘贴发到 QQ 群里吧！</div>
+  </div>
+
+  <script src="./js/config.js"></script>
+  <script src="./js/audio.js"></script>
+  <script src="./js/graphics.js"></script>
+  <script src="./js/world.js"></script>
+  <script src="./js/entities.js"></script>
+  <script src="./js/ui.js"></script>
+  <script src="./js/game.js"></script>
+</body>
+</html>
